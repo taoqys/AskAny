@@ -7,6 +7,7 @@ public sealed class GlobalDoubleShiftHook : IDisposable
 {
     private const int WhKeyboardLl = 13;
     private const int WmKeyUp = 0x0101;
+    private const uint LlkfUp = 0x80;
     private const int VkShift = 0x10;
     private const int VkLeftShift = 0xA0;
     private const int VkRightShift = 0xA1;
@@ -47,10 +48,11 @@ public sealed class GlobalDoubleShiftHook : IDisposable
 
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && wParam == WmKeyUp)
+        if (nCode >= 0)
         {
             var keyboard = Marshal.PtrToStructure<KbdLlHookStruct>(lParam);
-            if (keyboard.VirtualKey is VkShift or VkLeftShift or VkRightShift)
+            var isKeyUp = wParam.ToInt64() == WmKeyUp || (keyboard.Flags & LlkfUp) != 0;
+            if (isKeyUp && keyboard.VirtualKey is VkShift or VkLeftShift or VkRightShift)
             {
                 var now = Environment.TickCount64;
                 var elapsed = now - _lastShiftUpTick;
@@ -111,5 +113,3 @@ public sealed class GlobalDoubleShiftHook : IDisposable
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string? moduleName);
 }
-
-
