@@ -263,9 +263,24 @@ public partial class MainWindow : Window
             : GetWindowThreadProcessId(foregroundWindow, out _);
         var currentThread = GetCurrentThreadId();
         var attached = false;
+        var foregroundLockChanged = false;
+        var previousForegroundLockTimeout = 0u;
 
         try
         {
+            if (SystemParametersInfo(
+                    0x2000,
+                    0,
+                    ref previousForegroundLockTimeout,
+                    0))
+            {
+                foregroundLockChanged = SystemParametersInfo(
+                    0x2001,
+                    0,
+                    IntPtr.Zero,
+                    0x0002);
+            }
+
             if (foregroundThread != 0 && foregroundThread != currentThread)
             {
                 attached = AttachThreadInput(currentThread, foregroundThread, true);
@@ -293,6 +308,15 @@ public partial class MainWindow : Window
         }
         finally
         {
+            if (foregroundLockChanged)
+            {
+                SystemParametersInfo(
+                    0x2001,
+                    0,
+                    new IntPtr(previousForegroundLockTimeout),
+                    0x0002);
+            }
+
             if (attached)
             {
                 AttachThreadInput(currentThread, foregroundThread, false);
@@ -753,6 +777,22 @@ public partial class MainWindow : Window
     private static extern void SwitchToThisWindow(
         IntPtr windowHandle,
         [MarshalAs(UnmanagedType.Bool)] bool altTab);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(
+        uint action,
+        uint parameter,
+        ref uint value,
+        uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SystemParametersInfo(
+        uint action,
+        uint parameter,
+        IntPtr value,
+        uint flags);
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(
