@@ -5,7 +5,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Threading;
 using AskAny.Models;
 using AskAny.Services;
 using Microsoft.Win32;
@@ -33,6 +32,7 @@ public partial class MainWindow : Window
     private bool _allowClose;
     private bool _suppressDeactivateHide;
     private bool _isLoadingProviders;
+    private bool _isFocusingPrompt;
     private string _lastAnswer = string.Empty;
 
     public MainWindow(
@@ -214,26 +214,45 @@ public partial class MainWindow : Window
         }
     }
 
-    private void FocusPromptEditor()
+    private async void FocusPromptEditor()
     {
-        if (PromptEditorBorder.Visibility != Visibility.Visible)
+        if (_isFocusingPrompt || PromptEditorBorder.Visibility != Visibility.Visible)
         {
             return;
         }
 
-        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        _isFocusingPrompt = true;
+        try
         {
-            Activate();
-            var handle = new WindowInteropHelper(this).Handle;
-            if (handle != IntPtr.Zero)
+            for (var attempt = 0; attempt < 3; attempt++)
             {
-                SetForegroundWindow(handle);
-            }
+                if (!IsVisible || PromptEditorBorder.Visibility != Visibility.Visible)
+                {
+                    return;
+                }
 
-            PromptBox.Focus();
-            Keyboard.Focus(PromptBox);
-            PromptBox.CaretIndex = PromptBox.Text.Length;
-        });
+                Activate();
+                var handle = new WindowInteropHelper(this).Handle;
+                if (handle != IntPtr.Zero)
+                {
+                    SetForegroundWindow(handle);
+                }
+
+                PromptBox.Focus();
+                Keyboard.Focus(PromptBox);
+                PromptBox.CaretIndex = PromptBox.Text.Length;
+
+                await Task.Delay(90);
+                if (IsActive && PromptBox.IsKeyboardFocused)
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            _isFocusingPrompt = false;
+        }
     }
 
     private static T? FindVisualParent<T>(DependencyObject? child)
