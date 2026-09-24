@@ -100,14 +100,6 @@ public sealed class AiService
                         : "none"
                 };
             }
-            else if (isThinking)
-            {
-                body["reasoning"] = new Dictionary<string, object?>
-                {
-                    ["effort"] = NormalizeReasoningEffort(provider.ReasoningEffort)
-                };
-            }
-
             if (!isThinking)
             {
                 body["temperature"] = 0.6;
@@ -129,6 +121,10 @@ public sealed class AiService
         if (!isThinking)
         {
             chatBody["temperature"] = 0.6;
+            if (provider.SupportsReasoningControl)
+            {
+                chatBody["reasoning_effort"] = "none";
+            }
         }
         else if (provider.SupportsReasoningControl)
         {
