@@ -235,7 +235,7 @@ public partial class MainWindow : Window
                 var handle = new WindowInteropHelper(this).Handle;
                 if (handle != IntPtr.Zero)
                 {
-                    SetForegroundWindow(handle);
+                    ForceForegroundWindow(handle);
                 }
 
                 PromptBox.Focus();
@@ -252,6 +252,42 @@ public partial class MainWindow : Window
         finally
         {
             _isFocusingPrompt = false;
+        }
+    }
+
+    private static void ForceForegroundWindow(IntPtr windowHandle)
+    {
+        var foregroundWindow = GetForegroundWindow();
+        var foregroundThread = foregroundWindow == IntPtr.Zero
+            ? 0
+            : GetWindowThreadProcessId(foregroundWindow, out _);
+        var currentThread = GetCurrentThreadId();
+        var attached = false;
+
+        try
+        {
+            if (foregroundThread != 0 && foregroundThread != currentThread)
+            {
+                attached = AttachThreadInput(currentThread, foregroundThread, true);
+            }
+
+            ShowWindow(windowHandle, 9);
+            BringWindowToTop(windowHandle);
+            if (!SetForegroundWindow(windowHandle))
+            {
+                keybd_event(0x12, 0, 0, UIntPtr.Zero);
+                SetForegroundWindow(windowHandle);
+                keybd_event(0x12, 0, 2, UIntPtr.Zero);
+            }
+
+            SetFocus(windowHandle);
+        }
+        finally
+        {
+            if (attached)
+            {
+                AttachThreadInput(currentThread, foregroundThread, false);
+            }
         }
     }
 
@@ -663,4 +699,40 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(
+        IntPtr windowHandle,
+        out uint processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(
+        uint attachThreadId,
+        uint attachToThreadId,
+        [MarshalAs(UnmanagedType.Bool)] bool attach);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr windowHandle, int command);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(
+        byte virtualKey,
+        byte scanCode,
+        uint flags,
+        UIntPtr extraInfo);
 }
