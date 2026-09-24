@@ -19,7 +19,9 @@ public sealed record FunctionOption(
     WorkflowMode Mode,
     string Name,
     string Description,
-    string Glyph);
+    string Glyph,
+    double IconOffsetX = 0,
+    double IconOffsetY = 0);
 
 public sealed class ProviderConfig
 {

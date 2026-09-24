@@ -214,7 +214,8 @@
                                                    TextAlignment="Center"
                                                    TextOptions.TextFormattingMode="Ideal">
                                             <TextBlock.RenderTransform>
-                                                <TranslateTransform X="0.7" Y="0.7" />
+                                                <TranslateTransform X="{Binding IconOffsetX}"
+                                                                    Y="{Binding IconOffsetY}" />
                                             </TextBlock.RenderTransform>
                                         </TextBlock>
                                     </Grid>

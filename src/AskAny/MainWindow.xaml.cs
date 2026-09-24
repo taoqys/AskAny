@@ -19,11 +19,11 @@ public partial class MainWindow : Window
     private readonly HistoryService _historyService;
     private readonly IReadOnlyList<FunctionOption> _functions =
     [
-        new(WorkflowMode.Explain, "解释说明", "拆解概念、背景和关键要点", "\uE946"),
-        new(WorkflowMode.Answer, "回答问题", "直接、准确地解答当前问题", "\uE8BD"),
-        new(WorkflowMode.TrackNews, "新闻追踪", "搜索最近动态并整理事件脉络", "\uE909"),
-        new(WorkflowMode.Think, "深度思考", "仅此模式请求模型的扩展推理", "\uE735"),
-        new(WorkflowMode.ExplainOnline, "联网解释", "结合网络资料解释问题并标注来源", "\uE774")
+        new(WorkflowMode.Explain, "解释说明", "拆解概念、背景和关键要点", "\uE946", 0.6, 0.4),
+        new(WorkflowMode.Answer, "回答问题", "直接、准确地解答当前问题", "\uE8BD", 1.6, 1.4),
+        new(WorkflowMode.TrackNews, "新闻追踪", "搜索最近动态并整理事件脉络", "\uE909", 0.6, 0.5),
+        new(WorkflowMode.Think, "深度思考", "仅此模式请求模型的扩展推理", "\uE735", 0.5, 1.2),
+        new(WorkflowMode.ExplainOnline, "联网解释", "结合网络资料解释问题并标注来源", "\uE774", 1.2, 0.5)
     ];
 
     private AppConfig _config = new();
