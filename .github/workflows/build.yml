@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore AskAny.sln
+
+      - name: Build
+        run: dotnet build AskAny.sln --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish src/AskAny/AskAny.csproj --configuration Release --runtime win-x64 --self-contained false --no-build --output artifacts/AskAny
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: AskAny-win-x64
+          path: artifacts/AskAny
+          if-no-files-found: error

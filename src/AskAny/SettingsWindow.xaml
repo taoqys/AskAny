@@ -1,0 +1,155 @@
+<Window x:Class="AskAny.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AskAny 设置"
+        Width="560"
+        Height="580"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Topmost="True">
+    <Border Margin="10"
+            Background="White"
+            BorderBrush="#DADAE0"
+            BorderThickness="1"
+            CornerRadius="14">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28"
+                              ShadowDepth="4"
+                              Opacity="0.18"
+                              Color="#202124" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="64" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="68" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="20,0,12,0">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock FontSize="19"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource InkBrush}"
+                               Text="设置" />
+                    <TextBlock Margin="0,3,0,0"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="模型接口与联网搜索配置" />
+                </StackPanel>
+                <Button HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource IconButton}"
+                        ToolTip="关闭"
+                        Click="CloseButton_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               FontSize="16"
+                               Text="&#xE711;" />
+                </Button>
+            </Grid>
+
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="24,4,24,16">
+                    <TextBlock FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource InkBrush}"
+                               Text="OpenAI 兼容模型" />
+                    <TextBlock Margin="0,5,0,8"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="支持 OpenAI Chat Completions 格式的接口" />
+
+                    <TextBlock Margin="0,6,0,6"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="接口地址" />
+                    <TextBox x:Name="BaseUriBox"
+                             Style="{StaticResource FormField}" />
+
+                    <TextBlock Margin="0,14,0,6"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="API Key" />
+                    <PasswordBox x:Name="OpenAiKeyBox"
+                                 Height="42"
+                                 Padding="12,8"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="14"
+                                 Foreground="{StaticResource InkBrush}"
+                                 CaretBrush="{StaticResource AccentBrush}" />
+
+                    <TextBlock Margin="0,14,0,6"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="模型名称" />
+                    <TextBox x:Name="ModelBox"
+                             Style="{StaticResource FormField}" />
+
+                    <Separator Margin="0,22,0,18"
+                               Background="{StaticResource LineBrush}" />
+
+                    <TextBlock FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource InkBrush}"
+                               Text="Tavily 联网搜索" />
+                    <TextBlock Margin="0,5,0,8"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="用于新闻追踪与联网解释" />
+
+                    <TextBlock Margin="0,6,0,6"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="Tavily API Key" />
+                    <PasswordBox x:Name="TavilyKeyBox"
+                                 Height="42"
+                                 Padding="12,8"
+                                 VerticalContentAlignment="Center"
+                                 FontSize="14"
+                                 Foreground="{StaticResource InkBrush}"
+                                 CaretBrush="{StaticResource AccentBrush}" />
+
+                    <CheckBox x:Name="TopMostCheck"
+                              Margin="0,18,0,0"
+                              FontSize="13"
+                              Foreground="{StaticResource InkBrush}"
+                              IsChecked="True"
+                              Content="窗口始终置顶" />
+
+                    <TextBlock Margin="0,18,0,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="API 密钥使用 Windows DPAPI 按当前 Windows 用户加密保存在本机。" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <Grid Grid.Row="2" Margin="20,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="SettingsStatusText"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{StaticResource MutedBrush}" />
+                <Button Grid.Column="1"
+                        Margin="0,0,10,0"
+                        Style="{StaticResource SecondaryButton}"
+                        Content="测试连接"
+                        IsEnabled="{Binding IsEnabled, ElementName=ModelBox}"
+                        Click="TestButton_Click" />
+                <Button Grid.Column="2"
+                        MinWidth="88"
+                        Style="{StaticResource PrimaryButton}"
+                        Content="保存"
+                        Click="SaveButton_Click" />
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
