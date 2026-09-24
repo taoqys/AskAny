@@ -312,12 +312,12 @@ public partial class MainWindow : Window
         return (cleaned.Length > 40 ? cleaned[..40] : cleaned) + ".md";
     }
 
-    private void PinButton_Click(object sender, RoutedEventArgs e)
+    private async void PinButton_Click(object sender, RoutedEventArgs e)
     {
         _config.KeepWindowOnTop = !_config.KeepWindowOnTop;
         Topmost = _config.KeepWindowOnTop;
         UpdatePinButton();
-        _ = _configService.SaveAsync(_config);
+        await _configService.SaveAsync(_config);
     }
 
     private void UpdatePinButton()
@@ -346,4 +346,3 @@ public partial class MainWindow : Window
         }
     }
 }
-

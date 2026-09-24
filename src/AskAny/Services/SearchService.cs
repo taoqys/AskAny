@@ -6,7 +6,7 @@ public sealed record SearchSource(
     string Title,
     string Url,
     string Content,
-    string? PublishedDate);
+    [property: JsonPropertyName("published_date")] string? PublishedDate);
 
 public sealed record SearchPacket(
     string Query,
@@ -93,5 +93,5 @@ public sealed class SearchService
         string? Title,
         string? Url,
         string? Content,
-        string? PublishedDate);
+        [property: JsonPropertyName("published_date")] string? PublishedDate);
 }
