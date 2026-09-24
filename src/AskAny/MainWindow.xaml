@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny"
         Width="860"
-        Height="680"
+        Height="720"
         MinWidth="760"
         MinHeight="620"
         WindowStyle="None"
@@ -30,7 +30,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="58" />
-                <RowDefinition Height="118" />
+                <RowDefinition Height="150" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="54" />
@@ -106,7 +106,8 @@
                         BorderThickness="1"
                         CornerRadius="4">
                     <Grid>
-                        <TextBox x:Name="PromptBox"
+                                        <TextBox x:Name="PromptBox"
+                                 MinHeight="112"
                                  Padding="12,10"
                                  VerticalContentAlignment="Top"
                                  AcceptsReturn="True"
@@ -193,6 +194,8 @@
                                                    FontFamily="Segoe MDL2 Assets"
                                                    FontSize="15"
                                                    Foreground="{StaticResource AccentBrush}"
+                                                   LineHeight="30"
+                                                   LineStackingStrategy="BlockLineHeight"
                                                    Text="{Binding Glyph}"
                                                    TextAlignment="Center" />
                                     </Grid>

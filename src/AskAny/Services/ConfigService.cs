@@ -21,7 +21,7 @@ public sealed class ConfigService
     {
         if (!File.Exists(_configPath))
         {
-            return new AppConfig();
+            return Normalize(new AppConfig());
         }
 
         try
@@ -54,7 +54,11 @@ public sealed class ConfigService
     {
         if (config.Providers.Count == 0)
         {
-            var migratedProvider = ProviderCatalog.CreatePreset("openai-chat");
+            var isDeepSeek = config.OpenAiBaseUri.Contains(
+                "deepseek",
+                StringComparison.OrdinalIgnoreCase);
+            var migratedProvider = ProviderCatalog.CreatePreset(
+                isDeepSeek ? "deepseek-responses" : "openai-chat");
             migratedProvider.BaseUri = string.IsNullOrWhiteSpace(config.OpenAiBaseUri)
                 ? migratedProvider.BaseUri
                 : config.OpenAiBaseUri;
