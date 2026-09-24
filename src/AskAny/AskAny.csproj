@@ -6,7 +6,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>AskAny</AssemblyName>
     <RootNamespace>AskAny</RootNamespace>
     <ApplicationIcon>Assets\AskAny.ico</ApplicationIcon>
