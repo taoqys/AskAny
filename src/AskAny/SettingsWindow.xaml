@@ -138,13 +138,13 @@
                            VerticalAlignment="Center"
                            FontSize="12"
                            Foreground="{StaticResource MutedBrush}" />
-                <Button Grid.Column="1"
+                <Button x:Name="TestButton" Grid.Column="1"
                         Margin="0,0,10,0"
                         Style="{StaticResource SecondaryButton}"
                         Content="测试连接"
                         IsEnabled="{Binding IsEnabled, ElementName=ModelBox}"
                         Click="TestButton_Click" />
-                <Button Grid.Column="2"
+                <Button x:Name="SaveButton" Grid.Column="2"
                         MinWidth="88"
                         Style="{StaticResource PrimaryButton}"
                         Content="保存"
@@ -153,3 +153,4 @@
         </Grid>
     </Border>
 </Window>
+

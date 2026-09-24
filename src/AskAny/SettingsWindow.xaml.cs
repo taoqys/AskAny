@@ -88,3 +88,4 @@ public partial class SettingsWindow : Window
         DialogResult = false;
     }
 }
+
