@@ -77,7 +77,7 @@ public partial class App : Application
     private void CreateTrayIcon(MainWindow mainWindow)
     {
         var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("显示 AskAny", null, (_, _) => Dispatch(mainWindow.ShowFromHotkey));
+        menu.Items.Add("显示 AskAny", null, (_, _) => Dispatch(() => mainWindow.ShowFromHotkey()));
         menu.Items.Add("历史记录", null, (_, _) => Dispatch(mainWindow.ShowHistoryFromTray));
         menu.Items.Add("设置", null, (_, _) => Dispatch(mainWindow.ShowSettingsFromTray));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -94,7 +94,7 @@ public partial class App : Application
             Visible = true,
             ContextMenuStrip = menu
         };
-        _trayIcon.DoubleClick += (_, _) => Dispatch(mainWindow.ShowFromHotkey);
+        _trayIcon.DoubleClick += (_, _) => Dispatch(() => mainWindow.ShowFromHotkey());
     }
 
     private void Dispatch(Action action)
