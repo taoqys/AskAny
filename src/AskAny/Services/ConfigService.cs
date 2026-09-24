@@ -27,10 +27,11 @@ public sealed class ConfigService
         try
         {
             await using var stream = File.OpenRead(_configPath);
-            return await JsonSerializer.DeserializeAsync<AppConfig>(
-                       stream,
-                       JsonDefaults.Options,
-                       cancellationToken) ?? new AppConfig();
+            var config = await JsonSerializer.DeserializeAsync<AppConfig>(
+                             stream,
+                             JsonDefaults.Options,
+                             cancellationToken) ?? new AppConfig();
+            return Normalize(config);
         }
         catch (JsonException)
         {
@@ -47,6 +48,57 @@ public sealed class ConfigService
         }
 
         File.Move(temporaryPath, _configPath, true);
+    }
+
+    private static AppConfig Normalize(AppConfig config)
+    {
+        if (config.Providers.Count == 0)
+        {
+            var migratedProvider = ProviderCatalog.CreatePreset("openai-chat");
+            migratedProvider.BaseUri = string.IsNullOrWhiteSpace(config.OpenAiBaseUri)
+                ? migratedProvider.BaseUri
+                : config.OpenAiBaseUri;
+            migratedProvider.SelectedModel = string.IsNullOrWhiteSpace(config.Model)
+                ? migratedProvider.SelectedModel
+                : config.Model;
+            migratedProvider.Models = migratedProvider.Models
+                .Append(migratedProvider.SelectedModel)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            migratedProvider.ApiKeyProtected = config.OpenAiApiKeyProtected;
+            config.Providers = [migratedProvider];
+            config.SelectedProviderId = migratedProvider.Id;
+        }
+
+        foreach (var provider in config.Providers)
+        {
+            provider.Models = provider.Models
+                .Where(model => !string.IsNullOrWhiteSpace(model))
+                .Select(model => model.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (provider.Models.Count == 0)
+            {
+                provider.Models = ["model-name"];
+            }
+
+            if (string.IsNullOrWhiteSpace(provider.SelectedModel) ||
+                !provider.Models.Contains(provider.SelectedModel, StringComparer.OrdinalIgnoreCase))
+            {
+                provider.SelectedModel = provider.Models[0];
+            }
+
+            if (string.IsNullOrWhiteSpace(provider.ReasoningEffort))
+            {
+                provider.ReasoningEffort = "high";
+            }
+        }
+
+        var selected = config.Providers.FirstOrDefault(
+            provider => provider.Id.Equals(config.SelectedProviderId, StringComparison.OrdinalIgnoreCase));
+        config.SelectedProviderId = selected?.Id ?? config.Providers[0].Id;
+        return config;
     }
 
     public static string Protect(string value)
@@ -90,13 +142,15 @@ public static class JsonDefaults
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() }
     };
 
     public static readonly JsonSerializerOptions Compact = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() }
     };
 }

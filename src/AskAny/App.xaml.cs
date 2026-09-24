@@ -5,6 +5,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using AskAny.Native;
 using AskAny.Services;
+using Forms = System.Windows.Forms;
 
 namespace AskAny;
 
@@ -13,6 +14,7 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private HttpClient? _httpClient;
     private GlobalDoubleShiftHook? _doubleShiftHook;
+    private Forms.NotifyIcon? _trayIcon;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -27,7 +29,6 @@ public partial class App : Application
         }
 
         _singleInstanceMutex = singleInstanceMutex;
-
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         _httpClient = new HttpClient
@@ -36,10 +37,12 @@ public partial class App : Application
         };
 
         var configService = new ConfigService();
+        var historyService = new HistoryService();
         var mainWindow = new MainWindow(
             configService,
             new AiService(_httpClient),
-            new SearchService(_httpClient));
+            new SearchService(_httpClient),
+            historyService);
 
         mainWindow.Show();
         mainWindow.UpdateLayout();
@@ -53,11 +56,50 @@ public partial class App : Application
         }
 
         mainWindow.Hide();
+        CreateTrayIcon(mainWindow);
 
         _doubleShiftHook = new GlobalDoubleShiftHook();
-        _doubleShiftHook.DoubleShiftPressed += (_, _) =>
-            Dispatcher.BeginInvoke(DispatcherPriority.Normal, mainWindow.ShowFromHotkey);
+        _doubleShiftHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
         _doubleShiftHook.Install();
+    }
+
+    private void CaptureSelectionAndShow(MainWindow mainWindow)
+    {
+        _ = Task.Run(() =>
+        {
+            var selectedText = SelectionCaptureService.TryCapture();
+            Dispatcher.BeginInvoke(
+                DispatcherPriority.Normal,
+                () => mainWindow.ShowFromHotkey(selectedText));
+        });
+    }
+
+    private void CreateTrayIcon(MainWindow mainWindow)
+    {
+        var menu = new Forms.ContextMenuStrip();
+        menu.Items.Add("显示 AskAny", null, (_, _) => Dispatch(mainWindow.ShowFromHotkey));
+        menu.Items.Add("历史记录", null, (_, _) => Dispatch(mainWindow.ShowHistoryFromTray));
+        menu.Items.Add("设置", null, (_, _) => Dispatch(mainWindow.ShowSettingsFromTray));
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add(new Forms.ToolStripMenuItem("双击 Shift 唤起") { Enabled = false });
+        menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("退出", null, (_, _) => Dispatch(mainWindow.RequestExit));
+
+        using var stream = GetResourceStream(
+            new Uri("pack://application:,,,/Assets/AskAny.ico")).Stream;
+        _trayIcon = new Forms.NotifyIcon
+        {
+            Icon = new System.Drawing.Icon(stream),
+            Text = "AskAny AI 助手",
+            Visible = true,
+            ContextMenuStrip = menu
+        };
+        _trayIcon.DoubleClick += (_, _) => Dispatch(mainWindow.ShowFromHotkey);
+    }
+
+    private void Dispatch(Action action)
+    {
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, action);
     }
 
     private static void SaveScreenshot(Window window, string outputPath)
@@ -88,6 +130,12 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _doubleShiftHook?.Dispose();
+        if (_trayIcon is not null)
+        {
+            _trayIcon.Visible = false;
+            _trayIcon.Dispose();
+        }
+
         _httpClient?.Dispose();
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();

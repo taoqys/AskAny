@@ -15,8 +15,7 @@ public sealed class AiService
     public async Task<string> ExecuteAsync(
         WorkflowMode mode,
         string prompt,
-        string baseUri,
-        string model,
+        ProviderConfig provider,
         string apiKey,
         SearchPacket? search,
         CancellationToken cancellationToken = default)
@@ -26,13 +25,14 @@ public sealed class AiService
             throw new InvalidOperationException("请先输入问题。");
         }
 
-        if (string.IsNullOrWhiteSpace(model))
+        if (string.IsNullOrWhiteSpace(provider.SelectedModel))
         {
-            throw new InvalidOperationException("请先在设置中填写模型名称。");
+            throw new InvalidOperationException("请先在窗口底部选择模型。");
         }
 
         var systemPrompt = BuildSystemPrompt(mode, search);
-        var endpoint = BuildEndpoint(baseUri);
+        var endpoint = BuildEndpoint(provider.BaseUri, provider.Protocol);
+        var requestBody = BuildRequestBody(mode, prompt, provider, systemPrompt);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
         if (!string.IsNullOrWhiteSpace(apiKey))
@@ -40,16 +40,8 @@ public sealed class AiService
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
         }
 
-        var body = new ChatRequest(
-            model.Trim(),
-            [
-                new ChatMessage("system", systemPrompt),
-                new ChatMessage("user", prompt)
-            ],
-            mode == WorkflowMode.Think ? 0.3 : 0.6);
-
         request.Content = new StringContent(
-            JsonSerializer.Serialize(body, JsonDefaults.Compact),
+            JsonSerializer.Serialize(requestBody, JsonDefaults.Compact),
             Encoding.UTF8,
             "application/json");
 
@@ -61,41 +53,168 @@ public sealed class AiService
             throw new InvalidOperationException($"模型请求失败（{(int)response.StatusCode}）：{Shorten(payload)}");
         }
 
-        var chatResponse = JsonSerializer.Deserialize<ChatResponse>(payload, JsonDefaults.Compact);
-        var content = chatResponse?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-        return string.IsNullOrWhiteSpace(content) ? "模型没有返回文本内容。" : content;
+        return provider.Protocol switch
+        {
+            ApiProtocol.Responses => ParseResponses(payload, mode),
+            _ => ParseChatCompletions(payload)
+        };
     }
 
     public async Task ValidateAsync(
-        string baseUri,
-        string model,
+        ProviderConfig provider,
         string apiKey,
         CancellationToken cancellationToken = default)
     {
         await ExecuteAsync(
             WorkflowMode.Answer,
             "只回复“连接成功”四个字。",
-            baseUri,
-            model,
+            provider,
             apiKey,
             null,
             cancellationToken);
     }
 
-    private static string BuildEndpoint(string baseUri)
+    private static object BuildRequestBody(
+        WorkflowMode mode,
+        string prompt,
+        ProviderConfig provider,
+        string systemPrompt)
+    {
+        var isThinking = mode == WorkflowMode.Think;
+
+        if (provider.Protocol == ApiProtocol.Responses)
+        {
+            var body = new Dictionary<string, object?>
+            {
+                ["model"] = provider.SelectedModel.Trim(),
+                ["instructions"] = systemPrompt,
+                ["input"] = prompt
+            };
+
+            if (provider.SupportsReasoningControl)
+            {
+                body["reasoning"] = new Dictionary<string, object?>
+                {
+                    ["effort"] = isThinking
+                        ? NormalizeReasoningEffort(provider.ReasoningEffort)
+                        : "none"
+                };
+            }
+            else if (isThinking)
+            {
+                body["reasoning"] = new Dictionary<string, object?>
+                {
+                    ["effort"] = NormalizeReasoningEffort(provider.ReasoningEffort)
+                };
+            }
+
+            if (!isThinking)
+            {
+                body["temperature"] = 0.6;
+            }
+
+            return body;
+        }
+
+        var chatBody = new Dictionary<string, object?>
+        {
+            ["model"] = provider.SelectedModel.Trim(),
+            ["messages"] = new[]
+            {
+                new ChatMessage("system", systemPrompt),
+                new ChatMessage("user", prompt)
+            }
+        };
+
+        if (!isThinking)
+        {
+            chatBody["temperature"] = 0.6;
+        }
+        else if (provider.SupportsReasoningControl)
+        {
+            chatBody["reasoning_effort"] = NormalizeReasoningEffort(provider.ReasoningEffort);
+        }
+
+        return chatBody;
+    }
+
+    private static string ParseChatCompletions(string payload)
+    {
+        var chatResponse = JsonSerializer.Deserialize<ChatResponse>(payload, JsonDefaults.Compact);
+        var content = chatResponse?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
+        return string.IsNullOrWhiteSpace(content) ? "模型没有返回文本内容。" : content;
+    }
+
+    private static string ParseResponses(string payload, WorkflowMode mode)
+    {
+        var response = JsonSerializer.Deserialize<ResponsesEnvelope>(payload, JsonDefaults.Compact);
+        if (response?.Output is null || response.Output.Count == 0)
+        {
+            return "模型没有返回文本内容。";
+        }
+
+        var answerParts = response.Output
+            .Where(item => item.Type == "message")
+            .SelectMany(item => item.Content ?? [])
+            .Where(content => content.Type == "output_text" && !string.IsNullOrWhiteSpace(content.Text))
+            .Select(content => content.Text!.Trim())
+            .ToArray();
+
+        var answer = string.Join(Environment.NewLine + Environment.NewLine, answerParts);
+        if (string.IsNullOrWhiteSpace(answer))
+        {
+            answer = response.Output.FirstOrDefault()?.Content?.FirstOrDefault()?.Text?.Trim()
+                     ?? "模型没有返回文本内容。";
+        }
+
+        if (mode != WorkflowMode.Think)
+        {
+            return answer;
+        }
+
+        var reasoningParts = response.Output
+            .Where(item => item.Type == "reasoning")
+            .SelectMany(item => item.Content ?? [])
+            .Where(content => content.Type == "reasoning_text" && !string.IsNullOrWhiteSpace(content.Text))
+            .Select(content => content.Text!.Trim())
+            .ToArray();
+
+        if (reasoningParts.Length == 0)
+        {
+            return answer;
+        }
+
+        return "## 思考摘要\n\n" +
+               string.Join(Environment.NewLine + Environment.NewLine, reasoningParts) +
+               "\n\n## 最终回答\n\n" +
+               answer;
+    }
+
+    private static string BuildEndpoint(string baseUri, ApiProtocol protocol)
     {
         if (string.IsNullOrWhiteSpace(baseUri))
         {
-            throw new InvalidOperationException("请先填写 OpenAI 兼容接口地址。");
+            throw new InvalidOperationException("请先在设置中填写接口地址。");
         }
 
         var normalized = baseUri.Trim().TrimEnd('/');
-        if (normalized.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-        {
-            return normalized;
-        }
+        var suffix = protocol == ApiProtocol.Responses ? "/responses" : "/chat/completions";
+        return normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+            ? normalized
+            : normalized + suffix;
+    }
 
-        return normalized + "/chat/completions";
+    private static string NormalizeReasoningEffort(string effort)
+    {
+        return effort.Trim().ToLowerInvariant() switch
+        {
+            "none" => "none",
+            "low" => "low",
+            "medium" => "medium",
+            "high" => "high",
+            "max" => "max",
+            _ => "high"
+        };
     }
 
     private static string BuildSystemPrompt(WorkflowMode mode, SearchPacket? search)
@@ -109,7 +228,7 @@ public sealed class AiService
             WorkflowMode.TrackNews =>
                 "你是中文新闻分析助手。根据提供的最新检索资料整理事件动态，按重要性组织内容，区分事实、背景和可能影响。",
             WorkflowMode.Think =>
-                "你是严谨的中文分析助手。先给出不超过六点的分析要点，再明确写出最终结论。不要虚构不确定信息。",
+                "你是严谨的中文分析助手。给出必要的分析要点，再明确写出最终结论。不要虚构不确定信息。",
             WorkflowMode.ExplainOnline =>
                 "你是中文研究型解释助手。结合提供的联网检索资料解释问题，明确区分资料事实、推断和你的结论。",
             _ => "你是一个中文 AI 助手。"
@@ -139,12 +258,17 @@ public sealed class AiService
 
     private sealed record ChatMessage(string Role, string Content);
 
-    private sealed record ChatRequest(
-        string Model,
-        ChatMessage[] Messages,
-        double Temperature);
-
     private sealed record ChatResponse(List<ChatChoice>? Choices);
 
     private sealed record ChatChoice(ChatMessage Message);
+
+    private sealed record ResponsesEnvelope(List<ResponseOutputItem>? Output);
+
+    private sealed record ResponseOutputItem(
+        string? Type,
+        List<ResponseContent>? Content);
+
+    private sealed record ResponseContent(
+        string? Type,
+        string? Text);
 }

@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using AskAny.Models;
 using AskAny.Services;
@@ -11,29 +13,36 @@ public partial class MainWindow : Window
     private readonly ConfigService _configService;
     private readonly AiService _aiService;
     private readonly SearchService _searchService;
+    private readonly HistoryService _historyService;
     private readonly IReadOnlyList<FunctionOption> _functions =
     [
         new(WorkflowMode.Explain, "解释说明", "拆解概念、背景和关键要点", "\uE946"),
         new(WorkflowMode.Answer, "回答问题", "直接、准确地解答当前问题", "\uE8BD"),
         new(WorkflowMode.TrackNews, "新闻追踪", "搜索最近动态并整理事件脉络", "\uE909"),
-        new(WorkflowMode.Think, "深度思考", "先分析要点，再给出明确结论", "\uE735"),
+        new(WorkflowMode.Think, "深度思考", "仅此模式请求模型的扩展推理", "\uE735"),
         new(WorkflowMode.ExplainOnline, "联网解释", "结合网络资料解释问题并标注来源", "\uE774")
     ];
 
     private AppConfig _config = new();
+    private ProviderConfig? _currentProvider;
     private bool _isRunning;
     private bool _allowClose;
+    private bool _suppressDeactivateHide;
+    private bool _isLoadingProviders;
+    private string _lastAnswer = string.Empty;
 
     public MainWindow(
         ConfigService configService,
         AiService aiService,
-        SearchService searchService)
+        SearchService searchService,
+        HistoryService historyService)
     {
         InitializeComponent();
 
         _configService = configService;
         _aiService = aiService;
         _searchService = searchService;
+        _historyService = historyService;
 
         FunctionList.ItemsSource = _functions;
         FunctionList.SelectedIndex = 0;
@@ -49,11 +58,22 @@ public partial class MainWindow : Window
     private async Task LoadConfigurationAsync()
     {
         _config = await _configService.LoadAsync();
+
+        _isLoadingProviders = true;
+        ProviderComboBox.ItemsSource = null;
+        ProviderComboBox.ItemsSource = _config.Providers;
+        _currentProvider = _config.Providers.FirstOrDefault(
+                               provider => provider.Id == _config.SelectedProviderId)
+                           ?? _config.Providers.FirstOrDefault();
+        ProviderComboBox.SelectedItem = _currentProvider;
+        RefreshModelComboBox();
+        _isLoadingProviders = false;
+
         Topmost = _config.KeepWindowOnTop;
         UpdatePinButton();
     }
 
-    public void ShowFromHotkey()
+    public void ShowFromHotkey(string? selectedText = null)
     {
         if (IsVisible && IsActive)
         {
@@ -70,8 +90,32 @@ public partial class MainWindow : Window
         Activate();
         Topmost = true;
         Topmost = _config.KeepWindowOnTop;
+
+        if (_config.AutoFillSelectedText && !string.IsNullOrWhiteSpace(selectedText))
+        {
+            PromptBox.Text = selectedText.Trim();
+            PromptBox.CaretIndex = PromptBox.Text.Length;
+        }
+
         PromptBox.Focus();
-        PromptBox.CaretIndex = PromptBox.Text.Length;
+    }
+
+    public void ShowSettingsFromTray()
+    {
+        ShowFromHotkey();
+        OpenSettings();
+    }
+
+    public void ShowHistoryFromTray()
+    {
+        ShowFromHotkey();
+        ShowHistory();
+    }
+
+    public void RequestExit()
+    {
+        _allowClose = true;
+        Application.Current.Shutdown();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -99,6 +143,7 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Enter)
         {
+            CommitModelSelection();
             _ = ExecuteSelectedAsync();
             e.Handled = true;
             return;
@@ -108,6 +153,20 @@ public partial class MainWindow : Window
         {
             OpenSettings();
             e.Handled = true;
+        }
+    }
+
+    private async void Window_Deactivated(object sender, EventArgs e)
+    {
+        if (!_config.HideWhenDeactivated || _suppressDeactivateHide)
+        {
+            return;
+        }
+
+        await Task.Delay(120);
+        if (!IsActive && IsVisible && !_suppressDeactivateHide)
+        {
+            Hide();
         }
     }
 
@@ -153,22 +212,28 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_currentProvider is null)
+        {
+            StatusText.Text = "请先配置提供商";
+            return;
+        }
+
         _isRunning = true;
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
-        ResponseModeText.Text = option.Name;
+        ResponseModeText.Text = $"{option.Name} · {_currentProvider.Name} / {_currentProvider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
-        OutputBox.Text = option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
+        SetOutputMarkdown(option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
             ? "正在检索网络资料…"
-            : "正在生成回答…";
+            : "正在生成回答…");
         StatusText.Text = "正在执行";
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        SearchPacket? search = null;
 
         try
         {
-            SearchPacket? search = null;
             if (option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline)
             {
                 var tavilyKey = ConfigService.Unprotect(_config.TavilyApiKeyProtected);
@@ -178,28 +243,42 @@ public partial class MainWindow : Window
                     tavilyKey);
 
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
-                OutputBox.Text = "正在结合检索资料生成回答…";
+                SetOutputMarkdown("正在结合检索资料生成回答…");
             }
 
             var answer = await _aiService.ExecuteAsync(
                 option.Mode,
                 prompt,
-                _config.OpenAiBaseUri,
-                _config.Model,
-                ConfigService.Unprotect(_config.OpenAiApiKeyProtected),
+                _currentProvider,
+                ConfigService.Unprotect(_currentProvider.ApiKeyProtected),
                 search);
 
-            OutputBox.Text = answer;
+            _lastAnswer = answer;
+            SetOutputMarkdown(answer);
             stopwatch.Stop();
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
             ResponseMetaText.Text = $"{stopwatch.Elapsed.TotalSeconds:F1} 秒{sourceText}";
             StatusText.Text = "执行完成";
+
+            await _historyService.AddAsync(new HistoryEntry
+            {
+                Mode = option.Mode,
+                ModeName = option.Name,
+                ProviderName = _currentProvider.Name,
+                Model = _currentProvider.SelectedModel,
+                Prompt = prompt,
+                Response = answer,
+                SourceCount = search?.Sources.Count ?? 0
+            });
         }
-        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception exception) when (
+            exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
         {
-            OutputBox.Text = exception is TaskCanceledException
+            var error = exception is TaskCanceledException
                 ? "请求超时，请稍后重试。"
                 : exception.Message;
+            _lastAnswer = error;
+            SetOutputMarkdown("## 执行失败\n\n" + error);
             ResponseMetaText.Text = "执行失败";
             StatusText.Text = "执行失败";
         }
@@ -210,19 +289,96 @@ public partial class MainWindow : Window
         }
     }
 
-    private void PromptBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void SetOutputMarkdown(string markdown)
+    {
+        OutputRichText.Document = MarkdownRenderer.Render(markdown);
+        OutputRichText.ScrollToHome();
+    }
+
+    private void PromptBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         PromptPlaceholder.Visibility = string.IsNullOrEmpty(PromptBox.Text)
             ? Visibility.Visible
             : Visibility.Collapsed;
     }
 
-    private void FunctionList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void FunctionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (FunctionList.SelectedItem is FunctionOption option)
         {
             StatusText.Text = $"已选择：{option.Name}，Enter 执行";
         }
+    }
+
+    private void ProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingProviders || ProviderComboBox.SelectedItem is not ProviderConfig provider)
+        {
+            return;
+        }
+
+        _currentProvider = provider;
+        _config.SelectedProviderId = provider.Id;
+        RefreshModelComboBox();
+        _ = _configService.SaveAsync(_config);
+    }
+
+    private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isLoadingProviders || _currentProvider is null)
+        {
+            return;
+        }
+
+        if (ModelComboBox.SelectedItem is string selectedModel &&
+            !string.IsNullOrWhiteSpace(selectedModel))
+        {
+            _currentProvider.SelectedModel = selectedModel;
+            _ = _configService.SaveAsync(_config);
+        }
+    }
+
+    private void ModelComboBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        CommitModelSelection();
+    }
+
+    private void CommitModelSelection()
+    {
+        if (_currentProvider is null)
+        {
+            return;
+        }
+
+        var model = ModelComboBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return;
+        }
+
+        if (!_currentProvider.Models.Contains(model, StringComparer.OrdinalIgnoreCase))
+        {
+            _currentProvider.Models.Add(model);
+        }
+
+        _currentProvider.SelectedModel = model;
+        _ = _configService.SaveAsync(_config);
+    }
+
+    private void RefreshModelComboBox()
+    {
+        if (_currentProvider is null)
+        {
+            ModelComboBox.ItemsSource = null;
+            return;
+        }
+
+        var wasLoading = _isLoadingProviders;
+        _isLoadingProviders = true;
+        ModelComboBox.ItemsSource = null;
+        ModelComboBox.ItemsSource = _currentProvider.Models;
+        ModelComboBox.Text = _currentProvider.SelectedModel;
+        _isLoadingProviders = wasLoading;
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -232,15 +388,57 @@ public partial class MainWindow : Window
 
     private async void OpenSettings()
     {
-        var settings = new SettingsWindow(_configService, _config, _aiService)
-        {
-            Owner = this
-        };
+        CommitModelSelection();
+        _suppressDeactivateHide = true;
 
-        if (settings.ShowDialog() == true)
+        try
         {
-            await LoadConfigurationAsync();
-            StatusText.Text = "设置已保存";
+            var settings = new SettingsWindow(_configService, _config, _aiService)
+            {
+                Owner = this
+            };
+
+            if (settings.ShowDialog() == true)
+            {
+                await LoadConfigurationAsync();
+                StatusText.Text = "设置已保存";
+            }
+        }
+        finally
+        {
+            _suppressDeactivateHide = false;
+        }
+    }
+
+    private void HistoryButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowHistory();
+    }
+
+    private async void ShowHistory()
+    {
+        _suppressDeactivateHide = true;
+
+        try
+        {
+            var historyWindow = new HistoryWindow(_historyService)
+            {
+                Owner = this
+            };
+
+            if (historyWindow.ShowDialog() == true &&
+                historyWindow.SelectedEntryToReuse is { } entry)
+            {
+                PromptBox.Text = entry.Prompt;
+                FunctionList.SelectedItem = _functions.FirstOrDefault(
+                    function => function.Mode == entry.Mode);
+                ShowWorkflowList();
+                PromptBox.Focus();
+            }
+        }
+        finally
+        {
+            _suppressDeactivateHide = false;
         }
     }
 
@@ -264,18 +462,18 @@ public partial class MainWindow : Window
 
     private void CopyButton_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(OutputBox.Text))
+        if (string.IsNullOrWhiteSpace(_lastAnswer))
         {
             return;
         }
 
-        Clipboard.SetText(OutputBox.Text);
+        Clipboard.SetText(_lastAnswer);
         StatusText.Text = "回答已复制";
     }
 
     private async void SaveButton_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(OutputBox.Text))
+        if (string.IsNullOrWhiteSpace(_lastAnswer))
         {
             return;
         }
@@ -292,7 +490,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        await File.WriteAllTextAsync(dialog.FileName, OutputBox.Text);
+        await File.WriteAllTextAsync(dialog.FileName, _lastAnswer);
         StatusText.Text = "回答已保存";
     }
 
@@ -326,18 +524,7 @@ public partial class MainWindow : Window
         PinButton.ToolTip = _config.KeepWindowOnTop ? "取消窗口置顶" : "固定窗口置顶";
     }
 
-    private void ExitButton_Click(object sender, RoutedEventArgs e)
-    {
-        RequestExit();
-    }
-
-    private void RequestExit()
-    {
-        _allowClose = true;
-        Application.Current.Shutdown();
-    }
-
-    private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void MainWindow_Closing(object? sender, CancelEventArgs e)
     {
         if (!_allowClose)
         {
