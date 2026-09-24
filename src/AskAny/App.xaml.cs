@@ -77,13 +77,16 @@ public partial class App : Application
 
     private void CaptureSelectionAndShow(MainWindow mainWindow)
     {
-        _ = Task.Run(() =>
+        var selectedText = SelectionCaptureService.TryCapture();
+        if (Dispatcher.CheckAccess())
         {
-            var selectedText = SelectionCaptureService.TryCapture();
-            Dispatcher.BeginInvoke(
-                DispatcherPriority.Normal,
-                () => mainWindow.ShowFromHotkey(selectedText));
-        });
+            mainWindow.ShowFromHotkey(selectedText);
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Normal,
+            () => mainWindow.ShowFromHotkey(selectedText));
     }
 
     private void CreateTrayIcon(MainWindow mainWindow)
