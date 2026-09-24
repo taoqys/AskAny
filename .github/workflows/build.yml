@@ -30,7 +30,7 @@ jobs:
         run: dotnet build AskAny.sln --configuration Release --no-restore
 
       - name: Publish
-        run: dotnet publish src/AskAny/AskAny.csproj --configuration Release --runtime win-x64 --self-contained false --no-build --output artifacts/AskAny
+        run: dotnet publish src/AskAny/AskAny.csproj --configuration Release --runtime win-x64 --self-contained false --output artifacts/AskAny
 
       - name: Upload build
         uses: actions/upload-artifact@v4
@@ -38,3 +38,4 @@ jobs:
           name: AskAny-win-x64
           path: artifacts/AskAny
           if-no-files-found: error
+
