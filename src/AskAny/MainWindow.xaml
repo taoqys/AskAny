@@ -245,7 +245,7 @@
                                      AcceptsReturn="True"
                                      VerticalScrollBarVisibility="Auto"
                                      FontSize="14"
-                                     LineHeight="23"
+
                                      Foreground="{StaticResource InkBrush}"
                                      Background="Transparent"
                                      BorderThickness="0" />
@@ -318,3 +318,4 @@
         </Grid>
     </Border>
 </Window>
+
