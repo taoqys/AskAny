@@ -74,6 +74,7 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
                     <Button Style="{StaticResource IconButton}"
+                            AutomationProperties.AutomationId="HistoryButton"
                             ToolTip="历史记录"
                             Click="HistoryButton_Click">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -81,6 +82,7 @@
                                    Text="&#xE81C;" />
                     </Button>
                     <Button Style="{StaticResource IconButton}"
+                            AutomationProperties.AutomationId="SettingsButton"
                             ToolTip="设置"
                             Click="SettingsButton_Click">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -88,6 +90,7 @@
                                    Text="&#xE713;" />
                     </Button>
                     <Button Style="{StaticResource IconButton}"
+                            AutomationProperties.AutomationId="HideButton"
                             ToolTip="隐藏窗口（Esc）"
                             Click="HideButton_Click">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
