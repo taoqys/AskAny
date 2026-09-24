@@ -196,16 +196,27 @@
                                         BorderBrush="#D5E0F2"
                                         BorderThickness="1"
                                         CornerRadius="3">
-                                    <Grid>
-                                        <TextBlock HorizontalAlignment="Center"
+                                    <Grid Width="24"
+                                          Height="24"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          UseLayoutRounding="True">
+                                        <TextBlock Width="20"
+                                                   Height="20"
+                                                   HorizontalAlignment="Center"
                                                    VerticalAlignment="Center"
                                                    FontFamily="Segoe MDL2 Assets"
                                                    FontSize="15"
                                                    Foreground="{StaticResource AccentBrush}"
-                                                   LineHeight="30"
+                                                   LineHeight="20"
                                                    LineStackingStrategy="BlockLineHeight"
                                                    Text="{Binding Glyph}"
-                                                   TextAlignment="Center" />
+                                                   TextAlignment="Center"
+                                                   TextOptions.TextFormattingMode="Ideal">
+                                            <TextBlock.RenderTransform>
+                                                <TranslateTransform X="0.7" Y="0.7" />
+                                            </TextBlock.RenderTransform>
+                                        </TextBlock>
                                     </Grid>
                                 </Border>
                                 <TextBlock Grid.Column="1"

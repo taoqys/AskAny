@@ -91,13 +91,18 @@ public sealed class AiService
                 ["input"] = prompt
             };
 
-            if (provider.SupportsReasoningControl)
+            if (!isThinking)
             {
                 body["reasoning"] = new Dictionary<string, object?>
                 {
-                    ["effort"] = isThinking
-                        ? NormalizeReasoningEffort(provider.ReasoningEffort)
-                        : "none"
+                    ["effort"] = "none"
+                };
+            }
+            else if (provider.SupportsReasoningControl)
+            {
+                body["reasoning"] = new Dictionary<string, object?>
+                {
+                    ["effort"] = NormalizeReasoningEffort(provider.ReasoningEffort)
                 };
             }
             if (!isThinking)

@@ -427,7 +427,7 @@ public static partial class MarkdownRenderer
     [GeneratedRegex(@"^(#{1,4})\s+(.+)$")]
     private static partial Regex HeadingRegex();
 
-    [GeneratedRegex(@"^\s*([-*+])\s+(.+)$")]
+    [GeneratedRegex(@"^\s*(?:[-*+]|[•●▪◦])\s+(.+)$")]
     private static partial Regex BulletRegex();
 
     [GeneratedRegex(@"^\s*\d+\.\s+(.+)$")]
