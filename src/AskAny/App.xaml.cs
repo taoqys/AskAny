@@ -20,15 +20,28 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        var singleInstanceMutex = new Mutex(true, @"Local\AskAny.Desktop", out var isFirstInstance);
-        if (!isFirstInstance)
+        var isScreenshot = e.Args.Length >= 2 &&
+                           e.Args[0].Equals("--screenshot", StringComparison.OrdinalIgnoreCase);
+        var instanceName = e.Args
+            .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
+            ?.Split('=', 2)[1];
+        var mutexName = string.IsNullOrWhiteSpace(instanceName)
+            ? @"Local\AskAny.Desktop"
+            : $@"Local\AskAny.Desktop.{instanceName}";
+
+        if (!isScreenshot)
         {
-            singleInstanceMutex.Dispose();
-            Shutdown();
-            return;
+            var singleInstanceMutex = new Mutex(true, mutexName, out var isFirstInstance);
+            if (!isFirstInstance)
+            {
+                singleInstanceMutex.Dispose();
+                Shutdown();
+                return;
+            }
+
+            _singleInstanceMutex = singleInstanceMutex;
         }
 
-        _singleInstanceMutex = singleInstanceMutex;
         DispatcherUnhandledException += OnDispatcherUnhandledException;
 
         _httpClient = new HttpClient
@@ -47,8 +60,7 @@ public partial class App : Application
         mainWindow.Show();
         mainWindow.UpdateLayout();
 
-        if (e.Args.Length >= 2 &&
-            e.Args[0].Equals("--screenshot", StringComparison.OrdinalIgnoreCase))
+        if (isScreenshot)
         {
             SaveScreenshot(mainWindow, e.Args[1]);
             Shutdown();
