@@ -273,11 +273,20 @@ public partial class MainWindow : Window
 
             ShowWindow(windowHandle, 9);
             BringWindowToTop(windowHandle);
+            SetWindowPos(
+                windowHandle,
+                new IntPtr(-1),
+                0,
+                0,
+                0,
+                0,
+                0x0001 | 0x0002 | 0x0040);
             if (!SetForegroundWindow(windowHandle))
             {
                 keybd_event(0x12, 0, 0, UIntPtr.Zero);
-                SetForegroundWindow(windowHandle);
                 keybd_event(0x12, 0, 2, UIntPtr.Zero);
+                SwitchToThisWindow(windowHandle, true);
+                SetForegroundWindow(windowHandle);
             }
 
             SetFocus(windowHandle);
@@ -728,6 +737,22 @@ public partial class MainWindow : Window
 
     [DllImport("user32.dll")]
     private static extern IntPtr SetFocus(IntPtr windowHandle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr windowHandle,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern void SwitchToThisWindow(
+        IntPtr windowHandle,
+        [MarshalAs(UnmanagedType.Bool)] bool altTab);
 
     [DllImport("user32.dll")]
     private static extern void keybd_event(
