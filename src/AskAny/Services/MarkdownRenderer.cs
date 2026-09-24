@@ -61,8 +61,9 @@ public static partial class MarkdownRenderer
             listType = ListKind.None;
         }
 
-        foreach (var rawLine in lines)
+        for (var index = 0; index < lines.Length; index++)
         {
+            var rawLine = lines[index];
             var line = rawLine.TrimEnd();
 
             if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
@@ -99,6 +100,30 @@ public static partial class MarkdownRenderer
             {
                 FlushParagraph();
                 FlushList();
+                continue;
+            }
+
+            if (IsTableStart(lines, index))
+            {
+                FlushParagraph();
+                FlushList();
+
+                var headers = SplitTableRow(line);
+                var alignments = SplitTableRow(lines[index + 1])
+                    .Select(ParseTableAlignment)
+                    .ToArray();
+                var tableRows = new List<List<string>>();
+                var rowIndex = index + 2;
+                while (rowIndex < lines.Length &&
+                       !string.IsNullOrWhiteSpace(lines[rowIndex]) &&
+                       lines[rowIndex].Contains('|'))
+                {
+                    tableRows.Add(SplitTableRow(lines[rowIndex]));
+                    rowIndex++;
+                }
+
+                document.Blocks.Add(CreateTable(headers, alignments, tableRows));
+                index = rowIndex - 1;
                 continue;
             }
 
@@ -198,6 +223,129 @@ public static partial class MarkdownRenderer
         return document;
     }
 
+    private static Table CreateTable(
+        List<string> headers,
+        TextAlignment[] alignments,
+        List<List<string>> rows)
+    {
+        var columnCount = Math.Max(headers.Count, rows.Count == 0
+            ? 0
+            : rows.Max(row => row.Count));
+        var table = new Table
+        {
+            CellSpacing = 0,
+            Margin = new Thickness(0, 6, 0, 10),
+            BorderBrush = LineBrush,
+            BorderThickness = new Thickness(1)
+        };
+
+        for (var column = 0; column < columnCount; column++)
+        {
+            table.Columns.Add(new TableColumn
+            {
+                Width = new GridLength(1, GridUnitType.Star)
+            });
+        }
+
+        var group = new TableRowGroup();
+        group.Rows.Add(CreateTableRow(headers, alignments, columnCount, true));
+        foreach (var row in rows)
+        {
+            group.Rows.Add(CreateTableRow(row, alignments, columnCount, false));
+        }
+
+        table.RowGroups.Add(group);
+        return table;
+    }
+
+    private static TableRow CreateTableRow(
+        IReadOnlyList<string> values,
+        IReadOnlyList<TextAlignment> alignments,
+        int columnCount,
+        bool isHeader)
+    {
+        var row = new TableRow
+        {
+            Background = isHeader ? CodeBrush : Brushes.Transparent
+        };
+
+        for (var column = 0; column < columnCount; column++)
+        {
+            var paragraph = CreateParagraph();
+            paragraph.Margin = new Thickness(0);
+            paragraph.TextAlignment = column < alignments.Count
+                ? alignments[column]
+                : TextAlignment.Left;
+            if (isHeader)
+            {
+                paragraph.FontWeight = FontWeights.SemiBold;
+            }
+
+            AddInline(
+                paragraph,
+                column < values.Count ? values[column].Trim() : string.Empty);
+            row.Cells.Add(new TableCell(paragraph)
+            {
+                Padding = new Thickness(8, 5, 8, 5),
+                BorderBrush = LineBrush,
+                BorderThickness = new Thickness(0, 0, 1, 1)
+            });
+        }
+
+        return row;
+    }
+
+    private static bool IsTableStart(string[] lines, int index)
+    {
+        return index + 1 < lines.Length &&
+               lines[index].Contains('|') &&
+               IsTableSeparator(lines[index + 1]);
+    }
+
+    private static bool IsTableSeparator(string line)
+    {
+        if (!line.Contains('|'))
+        {
+            return false;
+        }
+
+        var cells = SplitTableRow(line);
+        return cells.Count > 0 &&
+               cells.All(cell => TableSeparatorRegex().IsMatch(cell.Trim()));
+    }
+
+    private static List<string> SplitTableRow(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.StartsWith('|'))
+        {
+            trimmed = trimmed[1..];
+        }
+
+        if (trimmed.EndsWith('|'))
+        {
+            trimmed = trimmed[..^1];
+        }
+
+        return trimmed
+            .Split('|')
+            .Select(cell => cell.Trim())
+            .ToList();
+    }
+
+    private static TextAlignment ParseTableAlignment(string separator)
+    {
+        var value = separator.Trim();
+        var left = value.StartsWith(':');
+        var right = value.EndsWith(':');
+        return (left, right) switch
+        {
+            (true, true) => TextAlignment.Center,
+            (false, true) => TextAlignment.Right,
+            _ => TextAlignment.Left
+        };
+    }
+
     private static Paragraph CreateParagraph(string? text = null)
     {
         var paragraph = new Paragraph
@@ -293,6 +441,9 @@ public static partial class MarkdownRenderer
 
     [GeneratedRegex(@"^\[([^\]]+)\]\(([^)]+)\)$")]
     private static partial Regex LinkRegex();
+
+    [GeneratedRegex(@"^:?-{3,}:?$")]
+    private static partial Regex TableSeparatorRegex();
 
     private enum ListKind
     {

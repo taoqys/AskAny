@@ -1,7 +1,11 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Threading;
 using AskAny.Models;
 using AskAny.Services;
 using Microsoft.Win32;
@@ -81,6 +85,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        ResetForNewRequest();
+
         var workArea = SystemParameters.WorkArea;
         Left = workArea.Left + Math.Max(12, (workArea.Width - Width) / 2);
         Top = workArea.Top + Math.Max(12, (workArea.Height - Height) / 3);
@@ -97,7 +103,7 @@ public partial class MainWindow : Window
             PromptBox.CaretIndex = PromptBox.Text.Length;
         }
 
-        PromptBox.Focus();
+        FocusPromptEditor();
     }
 
     public void ShowSettingsFromTray()
@@ -129,22 +135,34 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Up)
         {
-            MoveSelection(-1);
+            if (FunctionList.Visibility == Visibility.Visible)
+            {
+                MoveSelection(-1);
+            }
+
             e.Handled = true;
             return;
         }
 
         if (e.Key == Key.Down)
         {
-            MoveSelection(1);
+            if (FunctionList.Visibility == Visibility.Visible)
+            {
+                MoveSelection(1);
+            }
+
             e.Handled = true;
             return;
         }
 
         if (e.Key == Key.Enter)
         {
-            CommitModelSelection();
-            _ = ExecuteSelectedAsync();
+            if (PromptEditorBorder.Visibility == Visibility.Visible)
+            {
+                CommitModelSelection();
+                _ = ExecuteSelectedAsync();
+            }
+
             e.Handled = true;
             return;
         }
@@ -168,6 +186,70 @@ public partial class MainWindow : Window
         {
             Hide();
         }
+    }
+
+    private void Window_Activated(object sender, EventArgs e)
+    {
+        if (PromptEditorBorder.Visibility == Visibility.Visible)
+        {
+            FocusPromptEditor();
+        }
+    }
+
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            FindVisualParent<Button>((DependencyObject)e.OriginalSource) is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            // DragMove can throw if the mouse button is released during the call.
+        }
+    }
+
+    private void FocusPromptEditor()
+    {
+        if (PromptEditorBorder.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, () =>
+        {
+            Activate();
+            var handle = new WindowInteropHelper(this).Handle;
+            if (handle != IntPtr.Zero)
+            {
+                SetForegroundWindow(handle);
+            }
+
+            PromptBox.Focus();
+            Keyboard.Focus(PromptBox);
+            PromptBox.CaretIndex = PromptBox.Text.Length;
+        });
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject? child)
+        where T : DependencyObject
+    {
+        while (child is not null)
+        {
+            if (child is T parent)
+            {
+                return parent;
+            }
+
+            child = VisualTreeHelper.GetParent(child);
+        }
+
+        return null;
     }
 
     private void MoveSelection(int offset)
@@ -222,6 +304,7 @@ public partial class MainWindow : Window
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
+        SetResponsePromptDisplay(prompt);
         ResponseModeText.Text = $"{option.Name} · {_currentProvider.Name} / {_currentProvider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
@@ -454,10 +537,35 @@ public partial class MainWindow : Window
 
     private void ShowWorkflowList()
     {
+        PromptInfoText.Visibility = Visibility.Collapsed;
+        PromptInfoText.Text = string.Empty;
+        PromptEditorBorder.Visibility = Visibility.Visible;
+        PromptRowDefinition.Height = new GridLength(120);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
-        PromptBox.Focus();
+        FocusPromptEditor();
+    }
+
+    private void ResetForNewRequest()
+    {
+        _lastAnswer = string.Empty;
+        PromptBox.Clear();
+        PromptInfoText.Text = string.Empty;
+        PromptInfoText.Visibility = Visibility.Collapsed;
+        PromptEditorBorder.Visibility = Visibility.Visible;
+        PromptRowDefinition.Height = new GridLength(120);
+        ResponsePanel.Visibility = Visibility.Collapsed;
+        FunctionList.Visibility = Visibility.Visible;
+        StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
+    }
+
+    private void SetResponsePromptDisplay(string prompt)
+    {
+        PromptInfoText.Text = prompt;
+        PromptInfoText.Visibility = Visibility.Visible;
+        PromptEditorBorder.Visibility = Visibility.Collapsed;
+        PromptRowDefinition.Height = new GridLength(58);
     }
 
     private void CopyButton_Click(object sender, RoutedEventArgs e)
@@ -532,4 +640,8 @@ public partial class MainWindow : Window
             Hide();
         }
     }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr windowHandle);
 }
