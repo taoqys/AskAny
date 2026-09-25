@@ -2,133 +2,116 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny"
-        Width="720"
-        Height="540"
-        MinWidth="660"
-        MinHeight="480"
+        Width="700"
+        Height="500"
+        MinWidth="620"
+        MinHeight="440"
         WindowStyle="None"
-        ResizeMode="CanResizeWithGrip"
+        ResizeMode="CanResize"
         AllowsTransparency="True"
         Background="Transparent"
         ShowInTaskbar="True"
         ShowActivated="True"
         Topmost="True"
         WindowStartupLocation="Manual"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True"
         PreviewKeyDown="Window_PreviewKeyDown"
         Activated="Window_Activated"
         Deactivated="Window_Deactivated">
     <Border Margin="8"
             Background="White"
-            BorderBrush="#CCD2DC"
+            BorderBrush="#D6DBE3"
             BorderThickness="1"
-            CornerRadius="4">
+            CornerRadius="5">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="22"
+            <DropShadowEffect BlurRadius="20"
                               ShadowDepth="3"
-                              Opacity="0.16"
+                              Opacity="0.15"
                               Color="#1F2937" />
         </Border.Effect>
 
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition x:Name="PromptRowDefinition" Height="86" />
+                <RowDefinition x:Name="PromptRowDefinition" Height="72" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="46" />
+                <RowDefinition Height="44" />
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0"
-                  Margin="10,6,8,6"
+                  Margin="11,6,7,6"
                   MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="38" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Border Width="30"
-                        Height="30"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Background="{StaticResource AccentBrush}"
-                        CornerRadius="4">
-                    <Grid>
-                        <Image Width="21"
-                               Height="21"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Source="Assets/AskAny.ico" />
-                    </Grid>
-                </Border>
+                <Image Width="26"
+                       Height="26"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       SnapsToDevicePixels="True"
+                       Source="Assets/AskAny.ico" />
 
-                <Grid Grid.Column="1" Margin="7,0,0,0">
+                <Grid Grid.Column="1" Margin="7,0,4,0">
                     <Border x:Name="PromptEditorBorder"
-                            Margin="0,0,0,4"
                             Background="Transparent"
-                            BorderBrush="{StaticResource LineBrush}"
-                            BorderThickness="0,0,0,1"
-                            CornerRadius="0">
+                            BorderThickness="0">
                         <Grid>
                             <TextBox x:Name="PromptBox"
-                                     MinHeight="58"
-                                     Padding="2,7"
+                                     MinHeight="54"
+                                     Padding="2,7,2,6"
                                      VerticalContentAlignment="Top"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto"
-                                     FontSize="14.5"
+                                     FontSize="15"
                                      Foreground="{StaticResource InkBrush}"
                                      CaretBrush="{StaticResource AccentBrush}"
                                      Background="Transparent"
                                      BorderThickness="0"
                                      MaxLength="12000"
                                      TextChanged="PromptBox_TextChanged" />
-                        <TextBlock x:Name="PromptPlaceholder"
-                                   Margin="3,11,3,8"
+                            <TextBlock x:Name="PromptPlaceholder"
+                                       Margin="3,10,3,8"
                                        VerticalAlignment="Top"
-                                       FontSize="14"
+                                       FontSize="14.5"
                                        Foreground="#9AA1AD"
                                        IsHitTestVisible="False"
-                                       TextWrapping="Wrap"
-                                       Text="输入问题…" />
+                                       Text="询问 AskAny…" />
                         </Grid>
                     </Border>
                     <TextBlock x:Name="PromptInfoText"
-                               Margin="12,0"
+                               Margin="3,0,10,0"
                                VerticalAlignment="Center"
-                               FontSize="14"
-                               Foreground="{StaticResource MutedBrush}"
+                               FontSize="14.5"
+                               Foreground="{StaticResource InkBrush}"
                                TextTrimming="CharacterEllipsis"
                                Visibility="Collapsed" />
                 </Grid>
 
-                <StackPanel Grid.Column="2"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <Button Style="{StaticResource IconButton}"
-                            AutomationProperties.AutomationId="SettingsButton"
-                            ToolTip="设置"
-                            Click="SettingsButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="17"
-                                   Text="&#xE713;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            AutomationProperties.AutomationId="HideButton"
-                            ToolTip="隐藏窗口（Esc）"
-                            Click="HideButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="16"
-                                   Text="&#xE711;" />
-                    </Button>
-                </StackPanel>
+                <Button Grid.Column="2"
+                        Style="{StaticResource IconButton}"
+                        Width="34"
+                        Height="34"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="SettingsButton"
+                        ToolTip="设置（F1）"
+                        Click="SettingsButton_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               FontSize="16"
+                               Text="&#xE713;" />
+                </Button>
             </Grid>
 
-            <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
+            <Border Grid.Row="1" Background="#E9ECF1" />
 
             <Grid Grid.Row="2">
                 <ListBox x:Name="FunctionList"
-                         Margin="10,8"
+                         Margin="10,6"
                          BorderThickness="0"
                          Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -143,7 +126,7 @@
                                     <ControlTemplate TargetType="ListBoxItem">
                                         <Border x:Name="Row"
                                                 Margin="0,1"
-                                                Padding="12,8"
+                                                Padding="10,8"
                                                 Background="Transparent"
                                                 BorderBrush="Transparent"
                                                 BorderThickness="3,0,0,0"
@@ -152,10 +135,10 @@
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Row" Property="Background" Value="#F5F7FA" />
+                                                <Setter TargetName="Row" Property="Background" Value="#F7F8FA" />
                                             </Trigger>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Row" Property="Background" Value="{StaticResource SurfaceBrush}" />
+                                                <Setter TargetName="Row" Property="Background" Value="#F4F7FC" />
                                                 <Setter TargetName="Row" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                                             </Trigger>
                                         </ControlTemplate.Triggers>
@@ -166,50 +149,63 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid>
+                            <Grid Height="30">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="40" />
+                                    <ColumnDefinition Width="38" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <Border Width="30"
-                                        Height="30"
-                                        HorizontalAlignment="Left"
-                                        VerticalAlignment="Center"
-                                        Background="{StaticResource AccentSoftBrush}"
-                                        BorderBrush="#D5E0F2"
-                                        BorderThickness="1"
-                                        CornerRadius="3">
-                                    <Grid Width="24"
-                                          Height="24"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          UseLayoutRounding="True">
-                                        <TextBlock Width="20"
-                                                   Height="20"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"
-                                                   FontFamily="Segoe MDL2 Assets"
-                                                   FontSize="15"
-                                                   Foreground="{StaticResource AccentBrush}"
-                                                   LineHeight="20"
-                                                   LineStackingStrategy="BlockLineHeight"
-                                                   Text="{Binding Glyph}"
-                                                   TextAlignment="Center"
-                                                   TextOptions.TextFormattingMode="Ideal">
-                                            <TextBlock.RenderTransform>
-                                                <TranslateTransform X="{Binding IconOffsetX}"
-                                                                    Y="{Binding IconOffsetY}" />
-                                            </TextBlock.RenderTransform>
-                                        </TextBlock>
-                                    </Grid>
-                                </Border>
+
+                                <Grid Width="24"
+                                      Height="24"
+                                      HorizontalAlignment="Left"
+                                      VerticalAlignment="Center">
+                                    <TextBlock Width="20"
+                                               Height="20"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Text="{Binding Glyph}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+                                                <Setter Property="FontSize" Value="16" />
+                                                <Setter Property="LineHeight" Value="20" />
+                                                <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+                                                <Setter Property="TextAlignment" Value="Center" />
+                                                <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+                                                <Setter Property="Foreground" Value="#667488" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                                 Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                        <TextBlock.RenderTransform>
+                                            <TranslateTransform X="{Binding IconOffsetX}"
+                                                                Y="{Binding IconOffsetY}" />
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                </Grid>
+
                                 <TextBlock Grid.Column="1"
-                                           Margin="8,0,12,0"
+                                           Margin="7,0,12,0"
                                            VerticalAlignment="Center"
-                                           FontSize="15"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource InkBrush}"
-                                           Text="{Binding Name}" />
+                                           Text="{Binding Name}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="FontSize" Value="15" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                             Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
@@ -230,42 +226,48 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Button Width="34"
-                                Height="34"
+                        <Button Width="32"
+                                Height="32"
                                 Style="{StaticResource IconButton}"
                                 ToolTip="返回功能列表（←）"
                                 Click="BackButton_Click">
                             <TextBlock FontFamily="Segoe MDL2 Assets"
-                                       FontSize="16"
+                                       FontSize="15"
                                        Text="&#xE72B;" />
                         </Button>
                         <StackPanel Grid.Column="1"
-                                    Margin="8,0"
+                                    Margin="7,0"
                                     VerticalAlignment="Center">
                             <TextBlock x:Name="ResponseModeText"
-                                       FontSize="13.5"
+                                       FontSize="13"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource InkBrush}" />
+                                       Foreground="{StaticResource InkBrush}"
+                                       TextTrimming="CharacterEllipsis" />
                             <TextBlock x:Name="ResponseMetaText"
-                                       Margin="0,2,0,0"
-                                       FontSize="11"
-                                       Foreground="{StaticResource MutedBrush}" />
+                                       Margin="0,1,0,0"
+                                       FontSize="10.5"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                         <StackPanel Grid.Column="2"
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
-                            <Button Style="{StaticResource IconButton}"
+                            <Button Width="32"
+                                    Height="32"
+                                    Style="{StaticResource IconButton}"
                                     ToolTip="复制原始回答"
                                     Click="CopyButton_Click">
                                 <TextBlock FontFamily="Segoe MDL2 Assets"
-                                           FontSize="16"
+                                           FontSize="15"
                                            Text="&#xE8C8;" />
                             </Button>
-                            <Button Style="{StaticResource IconButton}"
+                            <Button Width="32"
+                                    Height="32"
+                                    Style="{StaticResource IconButton}"
                                     ToolTip="保存为 Markdown"
                                     Click="SaveButton_Click">
                                 <TextBlock FontFamily="Segoe MDL2 Assets"
-                                           FontSize="17"
+                                           FontSize="16"
                                            Text="&#xE74E;" />
                             </Button>
                         </StackPanel>
@@ -280,12 +282,12 @@
                         <Border Margin="0,5,0,0"
                                 Padding="10,8"
                                 Background="#F7F8FA"
-                                BorderBrush="{StaticResource LineBrush}"
+                                BorderBrush="#E4E8EE"
                                 BorderThickness="1"
                                 CornerRadius="3">
                             <RichTextBox x:Name="ThinkingRichText"
                                          MinHeight="60"
-                                         MaxHeight="180"
+                                         MaxHeight="170"
                                          Padding="0"
                                          IsReadOnly="True"
                                          IsDocumentEnabled="True"
@@ -296,13 +298,13 @@
                     </Expander>
 
                     <Border Grid.Row="2"
-                            Background="#FCFCFD"
-                            BorderBrush="{StaticResource LineBrush}"
+                            Background="#FFFFFF"
+                            BorderBrush="#E4E8EE"
                             BorderThickness="1"
                             CornerRadius="3">
                         <Grid>
                             <RichTextBox x:Name="OutputRichText"
-                                         Margin="12"
+                                         Margin="13"
                                          Padding="0"
                                          IsReadOnly="True"
                                          IsDocumentEnabled="True"
@@ -323,40 +325,50 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="3" Margin="10,0">
+            <Grid Grid.Row="3" Margin="12,0,8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="StatusText"
                            VerticalAlignment="Center"
-                           FontSize="11.5"
+                           FontSize="11"
                            Foreground="{StaticResource MutedBrush}"
-                           Text="↑ ↓ 选择功能" />
+                           Text="↑↓ 选择 · Enter 执行"
+                           TextTrimming="CharacterEllipsis" />
 
-                <StackPanel Grid.Column="1"
-                            Orientation="Horizontal"
-                            VerticalAlignment="Center">
-                    <TextBlock Margin="0,0,6,0"
-                               VerticalAlignment="Center"
-                               FontSize="11.5"
-                               Foreground="{StaticResource MutedBrush}"
-                               Text="模型" />
-                    <ComboBox x:Name="ModelComboBox"
-                              Width="285"
-                              Style="{StaticResource ComboField}"
-                              DisplayMemberPath="DisplayName"
-                              IsEditable="True"
-                              IsTextSearchEnabled="True"
-                              SelectionChanged="ModelComboBox_SelectionChanged"
-                              LostKeyboardFocus="ModelComboBox_LostKeyboardFocus" />
-                </StackPanel>
+                <ComboBox x:Name="ModelComboBox"
+                          Grid.Column="1"
+                          Width="262"
+                          Height="32"
+                          Margin="8,0,3,0"
+                          VerticalAlignment="Center"
+                          Style="{StaticResource ComboField}"
+                          DisplayMemberPath="DisplayName"
+                          IsEditable="True"
+                          IsTextSearchEnabled="True"
+                          SelectionChanged="ModelComboBox_SelectionChanged"
+                          LostKeyboardFocus="ModelComboBox_LostKeyboardFocus" />
+
+                <Button Grid.Column="2"
+                        Width="34"
+                        Height="34"
+                        Style="{StaticResource IconButton}"
+                        AutomationProperties.AutomationId="HistoryButton"
+                        ToolTip="历史记录"
+                        Click="HistoryButton_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               FontSize="16"
+                               Text="&#xE81C;" />
+                </Button>
 
                 <Button x:Name="PinButton"
-                        Grid.Column="2"
-                        Margin="8,0,0,0"
+                        Grid.Column="3"
+                        Width="34"
+                        Height="34"
                         Style="{StaticResource IconButton}"
                         ToolTip="取消窗口置顶"
                         Click="PinButton_Click">

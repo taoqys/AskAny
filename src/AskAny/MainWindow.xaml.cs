@@ -598,7 +598,7 @@ public partial class MainWindow : Window
     {
         if (FunctionList.SelectedItem is FunctionOption option)
         {
-            StatusText.Text = $"已选择：{option.Name}，Enter 执行";
+            StatusText.Text = $"{option.Name} · Enter 执行";
         }
     }
 
@@ -677,6 +677,7 @@ public partial class MainWindow : Window
             _currentProvider = preferred?.Provider ?? _config.Providers.FirstOrDefault();
             ModelComboBox.SelectedItem = preferred;
             ModelComboBox.Text = preferred?.DisplayName ?? string.Empty;
+            ModelComboBox.ToolTip = preferred?.DisplayName ?? "请先配置模型";
         }
         finally
         {
@@ -777,10 +778,10 @@ public partial class MainWindow : Window
         PromptInfoText.Text = string.Empty;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(86);
+        PromptRowDefinition.Height = new GridLength(72);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
-        StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
+        StatusText.Text = "↑↓ 选择 · Enter 执行";
         FocusPromptEditor();
     }
 
@@ -795,10 +796,10 @@ public partial class MainWindow : Window
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(86);
+        PromptRowDefinition.Height = new GridLength(72);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
-        StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
+        StatusText.Text = "↑↓ 选择 · Enter 执行";
     }
 
     private void SetResponsePromptDisplay(string prompt)
@@ -807,7 +808,7 @@ public partial class MainWindow : Window
         PromptInfoText.Text = prompt;
         PromptInfoText.Visibility = Visibility.Visible;
         PromptEditorBorder.Visibility = Visibility.Collapsed;
-        PromptRowDefinition.Height = new GridLength(52);
+        PromptRowDefinition.Height = new GridLength(48);
     }
 
     private void BeginFollowUpInput()
@@ -822,7 +823,7 @@ public partial class MainWindow : Window
         PromptPlaceholder.Text = "继续提问…";
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(86);
+        PromptRowDefinition.Height = new GridLength(72);
         ResponseMetaText.Text = "输入追问后按 Enter 发送 · ← 返回";
         FocusPromptEditor();
     }
