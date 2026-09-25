@@ -35,21 +35,37 @@ public static class CursorPlacementService
         var width = window.ActualWidth > 0 ? window.ActualWidth : window.Width;
         var height = window.ActualHeight > 0 ? window.ActualHeight : window.Height;
 
-        var x = cursorX + Offset;
-        var y = cursorY + Offset;
-        if (x + width > right)
+        var minX = left + 8;
+        var minY = top + 8;
+        var maxX = Math.Max(minX, right - width - 8);
+        var maxY = Math.Max(minY, bottom - height - 8);
+        var candidates = new[]
         {
-            x = cursorX - width - Offset;
-        }
+            new Point(cursorX + Offset, cursorY + Offset),
+            new Point(cursorX - width - Offset, cursorY + Offset),
+            new Point(cursorX + Offset, cursorY - height - Offset),
+            new Point(cursorX - width - Offset, cursorY - height - Offset)
+        };
 
-        if (y + height > bottom)
-        {
-            y = cursorY - height - Offset;
-        }
+        return candidates
+            .Select(candidate => new Point(
+                Math.Clamp(candidate.X, minX, maxX),
+                Math.Clamp(candidate.Y, minY, maxY)))
+            .OrderBy(candidate => DistanceToRectangle(candidate.X, candidate.Y, width, height, cursorX, cursorY))
+            .First();
+    }
 
-        x = Math.Max(left + 8, Math.Min(x, right - width - 8));
-        y = Math.Max(top + 8, Math.Min(y, bottom - height - 8));
-        return new Point(x, y);
+    private static double DistanceToRectangle(
+        double x,
+        double y,
+        double width,
+        double height,
+        double cursorX,
+        double cursorY)
+    {
+        var dx = Math.Max(Math.Max(x - cursorX, cursorX - (x + width)), 0);
+        var dy = Math.Max(Math.Max(y - cursorY, cursorY - (y + height)), 0);
+        return (dx * dx) + (dy * dy);
     }
 
     private static Point GetFallbackLocation(Window window)

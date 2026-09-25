@@ -169,7 +169,6 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Border Width="30"
                                         Height="30"
@@ -210,13 +209,6 @@
                                            FontWeight="SemiBold"
                                            Foreground="{StaticResource InkBrush}"
                                            Text="{Binding Name}" />
-                                <TextBlock Grid.Column="2"
-                                           Margin="8,0,4,0"
-                                           VerticalAlignment="Center"
-                                           FontFamily="Segoe MDL2 Assets"
-                                           FontSize="14"
-                                           Foreground="#8E96A3"
-                                           Text="&#xE724;" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
