@@ -45,9 +45,13 @@ jobs:
             @{ Path = "artifacts/ui/main.png"; Arguments = @("--screenshot", "artifacts/ui/main.png") }
           )
           foreach ($capture in $captures) {
-            $arguments = $capture.Arguments
-            & $exe @arguments
-            Write-Host "$($capture.Path) exit code: $LASTEXITCODE"
+            $process = Start-Process `
+              -FilePath $exe `
+              -ArgumentList $capture.Arguments `
+              -Wait `
+              -PassThru `
+              -WindowStyle Hidden
+            Write-Host "$($capture.Path) exit code: $($process.ExitCode)"
             if (-not (Test-Path $capture.Path)) {
               throw "Failed to render $($capture.Path)"
             }
