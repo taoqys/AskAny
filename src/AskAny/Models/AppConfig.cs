@@ -25,6 +25,8 @@ public sealed record FunctionOption(
 
 public sealed record ConversationTurn(string Role, string Content);
 
+public sealed record AiResult(string Answer, string? Reasoning = null);
+
 public sealed record ModelChoice(ProviderConfig Provider, string Model)
 {
     public string DisplayName => $"{Provider.Name} · {Model}";
@@ -85,6 +87,7 @@ public sealed class HistoryEntry
     public string Model { get; set; } = string.Empty;
     public string Prompt { get; set; } = string.Empty;
     public string Response { get; set; } = string.Empty;
+    public string Reasoning { get; set; } = string.Empty;
     public int SourceCount { get; set; }
 
     [JsonIgnore]

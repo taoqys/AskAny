@@ -13,7 +13,7 @@
         ShowInTaskbar="True"
         ShowActivated="True"
         Topmost="True"
-        WindowStartupLocation="CenterScreen"
+        WindowStartupLocation="Manual"
         PreviewKeyDown="Window_PreviewKeyDown"
         Activated="Window_Activated"
         Deactivated="Window_Deactivated">
@@ -31,24 +31,24 @@
 
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="46" />
-                <RowDefinition x:Name="PromptRowDefinition" Height="96" />
+                <RowDefinition x:Name="PromptRowDefinition" Height="86" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="46" />
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0"
-                  Margin="12,0,8,0"
+                  Margin="10,6,8,6"
                   MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="40" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Border Width="30"
                         Height="30"
+                        HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Background="{StaticResource AccentBrush}"
                         CornerRadius="4">
@@ -61,26 +61,49 @@
                     </Grid>
                 </Border>
 
-                <StackPanel Grid.Column="1"
-                            Margin="9,0,0,0"
-                            VerticalAlignment="Center">
-                    <TextBlock FontSize="15"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource InkBrush}"
-                               Text="AskAny" />
-                </StackPanel>
+                <Grid Grid.Column="1" Margin="7,0,0,0">
+                    <Border x:Name="PromptEditorBorder"
+                            Background="#FAFBFC"
+                            BorderBrush="{StaticResource LineBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <Grid>
+                            <TextBox x:Name="PromptBox"
+                                     MinHeight="58"
+                                     Padding="10,7"
+                                     VerticalContentAlignment="Top"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     FontSize="14.5"
+                                     Foreground="{StaticResource InkBrush}"
+                                     CaretBrush="{StaticResource AccentBrush}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     MaxLength="12000"
+                                     TextChanged="PromptBox_TextChanged" />
+                            <TextBlock x:Name="PromptPlaceholder"
+                                       Margin="12,9,12,8"
+                                       VerticalAlignment="Top"
+                                       FontSize="14"
+                                       Foreground="#9AA1AD"
+                                       IsHitTestVisible="False"
+                                       TextWrapping="Wrap"
+                                       Text="输入问题…" />
+                        </Grid>
+                    </Border>
+                    <TextBlock x:Name="PromptInfoText"
+                               Margin="12,0"
+                               VerticalAlignment="Center"
+                               FontSize="14"
+                               Foreground="{StaticResource MutedBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="Collapsed" />
+                </Grid>
 
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
-                    <Button Style="{StaticResource IconButton}"
-                            AutomationProperties.AutomationId="HistoryButton"
-                            ToolTip="历史记录"
-                            Click="HistoryButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="17"
-                                   Text="&#xE81C;" />
-                    </Button>
                     <Button Style="{StaticResource IconButton}"
                             AutomationProperties.AutomationId="SettingsButton"
                             ToolTip="设置"
@@ -100,49 +123,9 @@
                 </StackPanel>
             </Grid>
 
-            <Grid Grid.Row="1" Margin="12,6,12,8">
-                <Border x:Name="PromptEditorBorder"
-                        Background="#FAFBFC"
-                        BorderBrush="{StaticResource LineBrush}"
-                        BorderThickness="1"
-                        CornerRadius="4">
-                    <Grid>
-                        <TextBox x:Name="PromptBox"
-                                 MinHeight="64"
-                                 Padding="10,8"
-                                 VerticalContentAlignment="Top"
-                                 AcceptsReturn="True"
-                                 TextWrapping="Wrap"
-                                 VerticalScrollBarVisibility="Auto"
-                                 FontSize="14.5"
-                                 Foreground="{StaticResource InkBrush}"
-                                 CaretBrush="{StaticResource AccentBrush}"
-                                 Background="Transparent"
-                                 BorderThickness="0"
-                                 MaxLength="12000"
-                                 TextChanged="PromptBox_TextChanged" />
-                        <TextBlock x:Name="PromptPlaceholder"
-                                   Margin="12,10,12,8"
-                                   VerticalAlignment="Top"
-                                   FontSize="14"
-                                   Foreground="#9AA1AD"
-                                   IsHitTestVisible="False"
-                                   TextWrapping="Wrap"
-                                   Text="输入问题…" />
-                    </Grid>
-                </Border>
-                <TextBlock x:Name="PromptInfoText"
-                           Margin="14,0"
-                           VerticalAlignment="Center"
-                           FontSize="14"
-                           Foreground="{StaticResource MutedBrush}"
-                           TextTrimming="CharacterEllipsis"
-                           Visibility="Collapsed" />
-            </Grid>
+            <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
-            <Border Grid.Row="2" Background="{StaticResource LineBrush}" />
-
-            <Grid Grid.Row="3">
+            <Grid Grid.Row="2">
                 <ListBox x:Name="FunctionList"
                          Margin="8,5"
                          BorderThickness="0"
@@ -244,10 +227,11 @@
                       Visibility="Collapsed">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -256,7 +240,7 @@
                         <Button Width="34"
                                 Height="34"
                                 Style="{StaticResource IconButton}"
-                                ToolTip="返回功能列表"
+                                ToolTip="返回功能列表（←）"
                                 Click="BackButton_Click">
                             <TextBlock FontFamily="Segoe MDL2 Assets"
                                        FontSize="16"
@@ -266,7 +250,7 @@
                                     Margin="8,0"
                                     VerticalAlignment="Center">
                             <TextBlock x:Name="ResponseModeText"
-                                       FontSize="14"
+                                       FontSize="13.5"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource InkBrush}" />
                             <TextBlock x:Name="ResponseMetaText"
@@ -294,14 +278,38 @@
                         </StackPanel>
                     </Grid>
 
-                    <Border Grid.Row="1"
+                    <Expander x:Name="ThinkingExpander"
+                              Grid.Row="1"
+                              Margin="0,0,0,6"
+                              IsExpanded="False"
+                              Visibility="Collapsed"
+                              Header="思考过程">
+                        <Border Margin="0,5,0,0"
+                                Padding="10,8"
+                                Background="#F7F8FA"
+                                BorderBrush="{StaticResource LineBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <RichTextBox x:Name="ThinkingRichText"
+                                         MinHeight="60"
+                                         MaxHeight="180"
+                                         Padding="0"
+                                         IsReadOnly="True"
+                                         IsDocumentEnabled="True"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         VerticalScrollBarVisibility="Auto" />
+                        </Border>
+                    </Expander>
+
+                    <Border Grid.Row="2"
                             Background="#FCFCFD"
                             BorderBrush="{StaticResource LineBrush}"
                             BorderThickness="1"
                             CornerRadius="3">
                         <Grid>
                             <RichTextBox x:Name="OutputRichText"
-                                         Margin="14"
+                                         Margin="12"
                                          Padding="0"
                                          IsReadOnly="True"
                                          IsDocumentEnabled="True"
@@ -322,7 +330,7 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="4" Margin="10,0">
+            <Grid Grid.Row="3" Margin="10,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />

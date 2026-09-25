@@ -6,6 +6,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using AskAny.Models;
+using AskAny.Native;
 using AskAny.Services;
 using Microsoft.Win32;
 
@@ -88,9 +89,9 @@ public partial class MainWindow : Window
 
         ResetForNewRequest();
 
-        var workArea = SystemParameters.WorkArea;
-        Left = workArea.Left + Math.Max(12, (workArea.Width - Width) / 2);
-        Top = workArea.Top + Math.Max(12, (workArea.Height - Height) / 3);
+        var location = CursorPlacementService.GetPopupLocation(this);
+        Left = location.X;
+        Top = location.Y;
 
         Show();
         WindowState = WindowState.Normal;
@@ -456,9 +457,11 @@ public partial class MainWindow : Window
         SetResponsePromptDisplay(prompt);
         ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
-        SetOutputMarkdown(option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
-            ? "正在检索网络资料…"
-            : "正在生成回答…");
+        SetOutputMarkdown(
+            option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
+                ? "正在检索网络资料…"
+                : "正在生成回答…",
+            null);
         StatusText.Text = "正在执行";
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -475,10 +478,10 @@ public partial class MainWindow : Window
                     tavilyKey);
 
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
-                SetOutputMarkdown("正在结合检索资料生成回答…");
+                SetOutputMarkdown("正在结合检索资料生成回答…", null);
             }
 
-            var answer = await _aiService.ExecuteAsync(
+            var result = await _aiService.ExecuteAsync(
                 option.Mode,
                 prompt,
                 provider,
@@ -486,10 +489,12 @@ public partial class MainWindow : Window
                 search,
                 _conversation.ToArray());
 
-            _lastAnswer = answer;
-            SetOutputMarkdown(answer);
+            var displayAnswer = AppendSources(result.Answer, search);
+            var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
+            _lastAnswer = displayAnswer;
+            SetOutputMarkdown(displayAnswer, reasoning);
             _conversation.Add(new ConversationTurn("user", prompt));
-            _conversation.Add(new ConversationTurn("assistant", answer));
+            _conversation.Add(new ConversationTurn("assistant", result.Answer));
             stopwatch.Stop();
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
             ResponseMetaText.Text =
@@ -503,7 +508,8 @@ public partial class MainWindow : Window
                 ProviderName = provider.Name,
                 Model = provider.SelectedModel,
                 Prompt = prompt,
-                Response = answer,
+                Response = displayAnswer,
+                Reasoning = result.Reasoning ?? string.Empty,
                 SourceCount = search?.Sources.Count ?? 0
             });
         }
@@ -514,7 +520,7 @@ public partial class MainWindow : Window
                 ? "请求超时，请稍后重试。"
                 : exception.Message;
             _lastAnswer = error;
-            SetOutputMarkdown("## 执行失败\n\n" + error);
+            SetOutputMarkdown("## 执行失败\n\n" + error, null);
             ResponseMetaText.Text = "执行失败";
             StatusText.Text = "执行失败";
         }
@@ -525,10 +531,59 @@ public partial class MainWindow : Window
         }
     }
 
-    private void SetOutputMarkdown(string markdown)
+    private void SetOutputMarkdown(string markdown, string? reasoning)
     {
         OutputRichText.Document = MarkdownRenderer.Render(markdown);
         OutputRichText.ScrollToHome();
+
+        if (string.IsNullOrWhiteSpace(reasoning))
+        {
+            ThinkingRichText.Document = MarkdownRenderer.Render(string.Empty);
+            ThinkingExpander.Visibility = Visibility.Collapsed;
+            ThinkingExpander.IsExpanded = false;
+            return;
+        }
+
+        ThinkingRichText.Document = MarkdownRenderer.Render(reasoning);
+        ThinkingExpander.Visibility = Visibility.Visible;
+        ThinkingExpander.IsExpanded = false;
+    }
+
+    private static string AppendSources(string answer, SearchPacket? search)
+    {
+        if (search is null || search.Sources.Count == 0)
+        {
+            return answer;
+        }
+
+        var builder = new StringBuilder(answer);
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("## 来源");
+        builder.AppendLine();
+
+        for (var index = 0; index < search.Sources.Count; index++)
+        {
+            var source = search.Sources[index];
+            var title = source.Title
+                .Replace("[", "\\[", StringComparison.Ordinal)
+                .Replace("]", "\\]", StringComparison.Ordinal);
+            var label = string.IsNullOrWhiteSpace(source.Url)
+                ? title
+                : $"[{title}]({source.Url})";
+            builder.Append(index + 1)
+                .Append(". ")
+                .Append(label);
+
+            if (!string.IsNullOrWhiteSpace(source.PublishedDate))
+            {
+                builder.Append(" · ").Append(source.PublishedDate);
+            }
+
+            builder.AppendLine();
+        }
+
+        return builder.ToString().TrimEnd();
     }
 
     private void PromptBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -721,7 +776,7 @@ public partial class MainWindow : Window
         PromptInfoText.Text = string.Empty;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(96);
+        PromptRowDefinition.Height = new GridLength(86);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
@@ -739,7 +794,7 @@ public partial class MainWindow : Window
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(96);
+        PromptRowDefinition.Height = new GridLength(86);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
@@ -766,7 +821,7 @@ public partial class MainWindow : Window
         PromptPlaceholder.Text = "继续提问…";
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(96);
+        PromptRowDefinition.Height = new GridLength(86);
         ResponseMetaText.Text = "输入追问后按 Enter 发送 · ← 返回";
         FocusPromptEditor();
     }

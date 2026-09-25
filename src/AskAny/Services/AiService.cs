@@ -12,7 +12,7 @@ public sealed class AiService
         _httpClient = httpClient;
     }
 
-    public async Task<string> ExecuteAsync(
+    public async Task<AiResult> ExecuteAsync(
         WorkflowMode mode,
         string prompt,
         ProviderConfig provider,
@@ -61,7 +61,7 @@ public sealed class AiService
 
         return provider.Protocol switch
         {
-            ApiProtocol.Responses => ParseResponses(payload, mode),
+            ApiProtocol.Responses => ParseResponses(payload),
             _ => ParseChatCompletions(payload)
         };
     }
@@ -178,19 +178,23 @@ public sealed class AiService
         return chatBody;
     }
 
-    private static string ParseChatCompletions(string payload)
+    private static AiResult ParseChatCompletions(string payload)
     {
         var chatResponse = JsonSerializer.Deserialize<ChatResponse>(payload, JsonDefaults.Compact);
-        var content = chatResponse?.Choices?.FirstOrDefault()?.Message?.Content?.Trim();
-        return string.IsNullOrWhiteSpace(content) ? "模型没有返回文本内容。" : content;
+        var message = chatResponse?.Choices?.FirstOrDefault()?.Message;
+        var content = message?.Content?.Trim();
+        var reasoning = message?.ReasoningContent?.Trim();
+        return new AiResult(
+            string.IsNullOrWhiteSpace(content) ? "模型没有返回文本内容。" : content,
+            string.IsNullOrWhiteSpace(reasoning) ? null : reasoning);
     }
 
-    private static string ParseResponses(string payload, WorkflowMode mode)
+    private static AiResult ParseResponses(string payload)
     {
         var response = JsonSerializer.Deserialize<ResponsesEnvelope>(payload, JsonDefaults.Compact);
         if (response?.Output is null || response.Output.Count == 0)
         {
-            return "模型没有返回文本内容。";
+            return new AiResult("模型没有返回文本内容。");
         }
 
         var answerParts = response.Output
@@ -207,11 +211,6 @@ public sealed class AiService
                      ?? "模型没有返回文本内容。";
         }
 
-        if (mode != WorkflowMode.Think)
-        {
-            return answer;
-        }
-
         var reasoningParts = response.Output
             .Where(item => item.Type == "reasoning")
             .SelectMany(item => item.Content ?? [])
@@ -219,15 +218,11 @@ public sealed class AiService
             .Select(content => content.Text!.Trim())
             .ToArray();
 
-        if (reasoningParts.Length == 0)
-        {
-            return answer;
-        }
-
-        return "## 思考摘要\n\n" +
-               string.Join(Environment.NewLine + Environment.NewLine, reasoningParts) +
-               "\n\n## 最终回答\n\n" +
-               answer;
+        return new AiResult(
+            answer,
+            reasoningParts.Length == 0
+                ? null
+                : string.Join(Environment.NewLine + Environment.NewLine, reasoningParts));
     }
 
     private static string BuildEndpoint(string baseUri, ApiProtocol protocol)
@@ -296,7 +291,10 @@ public sealed class AiService
         return normalized.Length <= 320 ? normalized : normalized[..320] + "…";
     }
 
-    private sealed record ChatMessage(string Role, string Content);
+    private sealed record ChatMessage(
+        string Role,
+        string Content,
+        [property: JsonPropertyName("reasoning_content")] string? ReasoningContent = null);
 
     private sealed record ChatResponse(List<ChatChoice>? Choices);
 
