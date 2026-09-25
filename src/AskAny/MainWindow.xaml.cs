@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using AskAny.Models;
 using AskAny.Native;
 using AskAny.Services;
@@ -89,9 +90,12 @@ public partial class MainWindow : Window
 
         ResetForNewRequest();
 
+        WindowState = WindowState.Normal;
         Show();
         CursorPlacementService.PlaceWindow(this);
-        WindowState = WindowState.Normal;
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () => CursorPlacementService.PlaceWindow(this));
         Activate();
         Topmost = true;
         Topmost = _config.KeepWindowOnTop;
