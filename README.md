@@ -7,7 +7,8 @@ AskAny 是一个使用 WPF 和 .NET 8 构建的 Windows AI 快捷助手。双击
 - 双击左或右 `Shift` 唤起窗口；再次双击可隐藏
 - 窗口会跟随当前鼠标位置显示，并自动选择不超出屏幕的最近位置
 - `↑` / `↓` 选择功能，`Enter` 提交，`Esc` 隐藏，`Ctrl + Enter` 也可提交
-- 回答问题、解释说明、新闻追踪、深度思考、联网解释
+- 内置回答问题、解释说明、新闻追踪、深度思考和联网解释，可新增、删除、排序并改名
+- 每个功能选项都可以单独编辑系统提示词、图标和执行方式
 - 支持多个 OpenAI Chat Completions / Responses API 提供商
 - 内置 OpenAI、OpenAI Responses 和 DeepSeek Responses 预设
 - 主窗口底部可直接切换提供商和模型，模型名称也可以手动输入
@@ -35,7 +36,8 @@ AskAny 是一个使用 WPF 和 .NET 8 构建的 Windows AI 快捷助手。双击
 3. 选择 Chat Completions 或 Responses API 协议
 4. 对支持推理控制的提供商设置推理强度
 5. 如需“新闻追踪”或“联网解释”，填写 Tavily API Key
-6. 点击“测试当前提供商”验证配置，然后保存
+6. 在“功能选项”中管理主窗口的功能列表和对应的系统提示词
+7. 点击“测试连接”验证配置，然后保存
 
 DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的 `reasoning.effort` 规则：深度思考模式使用配置的强度，其他模式显式发送 `none`，避免默认开启思考。
 
