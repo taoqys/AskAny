@@ -32,10 +32,33 @@ jobs:
       - name: Publish
         run: dotnet publish src/AskAny/AskAny.csproj --configuration Release --runtime win-x64 --self-contained false --output artifacts/AskAny
 
+      - name: Generate UI previews
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts/ui | Out-Null
+          $exe = Join-Path $PWD artifacts/AskAny/AskAny.exe
+          & $exe --screenshot-settings artifacts/ui/settings-model.png 0
+          if ($LASTEXITCODE -ne 0) { throw "Failed to render settings-model.png" }
+          & $exe --screenshot-settings artifacts/ui/settings-functions.png 1
+          if ($LASTEXITCODE -ne 0) { throw "Failed to render settings-functions.png" }
+          & $exe --screenshot-settings artifacts/ui/settings-search.png 2
+          if ($LASTEXITCODE -ne 0) { throw "Failed to render settings-search.png" }
+          & $exe --screenshot artifacts/ui/main.png
+          if ($LASTEXITCODE -ne 0) { throw "Failed to render main.png" }
+
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:
           name: AskAny-win-x64
           path: artifacts/AskAny
+          if-no-files-found: error
+
+      - name: Upload UI previews
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: AskAny-ui-previews
+          path: artifacts/ui
           if-no-files-found: error
 
