@@ -21,8 +21,8 @@ public partial class MainWindow : Window
     private readonly HistoryService _historyService;
     private readonly IReadOnlyList<FunctionOption> _functions =
     [
+        new(WorkflowMode.Answer, "回答此问题", "直接、准确地解答当前问题", "\uE8BD", 0, -3.5),
         new(WorkflowMode.Explain, "解释说明", "拆解概念、背景和关键要点", "\uE946", 0.5, -2.5),
-        new(WorkflowMode.Answer, "回答问题", "直接、准确地解答当前问题", "\uE8BD", 0, -3.5),
         new(WorkflowMode.TrackNews, "新闻追踪", "搜索最近动态并整理事件脉络", "\uE909", 0, -2.5),
         new(WorkflowMode.Think, "深度思考", "仅此模式请求模型的扩展推理", "\uE735", 0, -3.5),
         new(WorkflowMode.ExplainOnline, "联网解释", "结合网络资料解释问题并标注来源", "\uE774", 0, -2.5)
@@ -228,7 +228,8 @@ public partial class MainWindow : Window
     private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed ||
-            FindVisualParent<Button>((DependencyObject)e.OriginalSource) is not null)
+            FindVisualParent<Button>((DependencyObject)e.OriginalSource) is not null ||
+            FindVisualParent<TextBoxBase>((DependencyObject)e.OriginalSource) is not null)
         {
             return;
         }
@@ -596,10 +597,6 @@ public partial class MainWindow : Window
 
     private void FunctionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (FunctionList.SelectedItem is FunctionOption option)
-        {
-            StatusText.Text = $"{option.Name} · Enter 执行";
-        }
     }
 
     private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -778,10 +775,10 @@ public partial class MainWindow : Window
         PromptInfoText.Text = string.Empty;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(72);
+        PromptRowDefinition.Height = new GridLength(78);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
-        StatusText.Text = "↑↓ 选择 · Enter 执行";
+        StatusText.Text = "← 按 ESC 关闭";
         FocusPromptEditor();
     }
 
@@ -796,10 +793,10 @@ public partial class MainWindow : Window
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(72);
+        PromptRowDefinition.Height = new GridLength(78);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
-        StatusText.Text = "↑↓ 选择 · Enter 执行";
+        StatusText.Text = "← 按 ESC 关闭";
     }
 
     private void SetResponsePromptDisplay(string prompt)
@@ -823,7 +820,7 @@ public partial class MainWindow : Window
         PromptPlaceholder.Text = "继续提问…";
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(72);
+        PromptRowDefinition.Height = new GridLength(78);
         ResponseMetaText.Text = "输入追问后按 Enter 发送 · ← 返回";
         FocusPromptEditor();
     }
