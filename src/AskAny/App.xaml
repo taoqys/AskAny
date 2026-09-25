@@ -124,8 +124,8 @@
         </Style>
 
         <Style x:Key="FormField" TargetType="TextBox">
-            <Setter Property="Height" Value="44" />
-            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Height" Value="46" />
+            <Setter Property="Padding" Value="12,9" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="Foreground" Value="{StaticResource InkBrush}" />
@@ -154,8 +154,8 @@
         </Style>
 
         <Style TargetType="PasswordBox">
-            <Setter Property="Height" Value="44" />
-            <Setter Property="Padding" Value="12,8" />
+            <Setter Property="Height" Value="46" />
+            <Setter Property="Padding" Value="12,9" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="Foreground" Value="{StaticResource InkBrush}" />

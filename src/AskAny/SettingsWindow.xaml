@@ -91,7 +91,7 @@
                         </ListBox>
                         <StackPanel Grid.Row="2" Margin="0,14,0,0">
                             <TextBlock Style="{StaticResource SectionTitle}" Text="新增提供商" />
-                            <ComboBox x:Name="PresetComboBox" Margin="0,8,0,0" Height="36" DisplayMemberPath="Name" Style="{StaticResource ComboField}" />
+                            <ComboBox x:Name="PresetComboBox" Margin="0,8,0,0" Height="36" DisplayMemberPath="Name" Background="White" Style="{StaticResource ComboField}" />
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -115,7 +115,7 @@
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="提供商名称" />
                                         <TextBox x:Name="ProviderNameBox" Style="{StaticResource FormField}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="API 协议" />
-                                        <ComboBox x:Name="ProtocolComboBox" Height="36" DisplayMemberPath="Name" Style="{StaticResource ComboField}" />
+                                        <ComboBox x:Name="ProtocolComboBox" Height="36" DisplayMemberPath="Name" Background="White" Style="{StaticResource ComboField}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="接口地址" />
                                         <TextBox x:Name="BaseUriBox" Style="{StaticResource FormField}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="API Key" />
@@ -154,7 +154,7 @@
                                                 <ColumnDefinition Width="150" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="推理强度" />
-                                            <ComboBox x:Name="ReasoningEffortComboBox" Grid.Column="1" Margin="14,0,0,0" Style="{StaticResource ComboField}" />
+                                            <ComboBox x:Name="ReasoningEffortComboBox" Grid.Column="1" Margin="14,0,0,0" Background="White" Style="{StaticResource ComboField}" />
                                         </Grid>
                                     </StackPanel>
                                 </Border>
