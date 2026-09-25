@@ -11,7 +11,7 @@ public partial class SettingsWindow : Window
 {
     public int PreviewTabIndex
     {
-        set => SettingsTabs.SelectedIndex = Math.Clamp(value, 0, SettingsTabs.Items.Count - 1);
+        set => ShowSettingsSection(Math.Clamp(value, 0, 3));
     }
 
     private readonly ConfigService _configService;
@@ -23,6 +23,7 @@ public partial class SettingsWindow : Window
     private FunctionOption? _selectedFunction;
     private bool _isLoadingProvider;
     private bool _isLoadingFunction;
+    private bool _isNavigatingSections;
 
     public SettingsWindow(
         ConfigService configService,
@@ -368,6 +369,17 @@ public partial class SettingsWindow : Window
         LoadFunctionToForm(function);
     }
 
+    private void FunctionEditorItem_PreviewMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (sender is ListBoxItem item)
+        {
+            item.IsSelected = true;
+            item.Focus();
+        }
+    }
+
     private void AddFunctionButton_Click(object sender, RoutedEventArgs e)
     {
         SaveCurrentFunction();
@@ -544,30 +556,51 @@ public partial class SettingsWindow : Window
         DeleteFunctionButton.IsEnabled = _functions.Count > 1;
     }
 
-    private void SettingsTabs_SelectionChanged(
+    private void SettingsNav_SelectionChanged(
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (ProviderSidebarColumn is null ||
-            ProviderSidebar is null ||
-            ProviderDividerColumn is null ||
-            ProviderDivider is null)
+        if (_isNavigatingSections || SettingsNav.SelectedIndex < 0)
         {
             return;
         }
 
-        var showProviderSidebar = SettingsTabs.SelectedIndex != 2;
-        var width = showProviderSidebar ? new GridLength(220) : new GridLength(0);
-        ProviderSidebarColumn.Width = width;
-        ProviderDividerColumn.Width = showProviderSidebar
-            ? new GridLength(1)
-            : new GridLength(0);
-        ProviderSidebar.Visibility = showProviderSidebar
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ProviderDivider.Visibility = showProviderSidebar
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        ShowSettingsSection(SettingsNav.SelectedIndex);
+    }
+
+    private void ShowSettingsSection(int index)
+    {
+        if (SettingsNav is null ||
+            ModelServicesPanel is null ||
+            FunctionOptionsPanel is null ||
+            ReasoningSearchPanel is null ||
+            WindowPreferencesPanel is null)
+        {
+            return;
+        }
+
+        _isNavigatingSections = true;
+        try
+        {
+            index = Math.Clamp(index, 0, 3);
+            SettingsNav.SelectedIndex = index;
+            ModelServicesPanel.Visibility = index == 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            FunctionOptionsPanel.Visibility = index == 1
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            ReasoningSearchPanel.Visibility = index == 2
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+            WindowPreferencesPanel.Visibility = index == 3
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+        finally
+        {
+            _isNavigatingSections = false;
+        }
     }
 
     private static List<string> ParseModels(string input)

@@ -2,9 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny 设置"
-        Width="860"
+        Width="940"
         Height="700"
-        MinWidth="760"
+        MinWidth="840"
         MinHeight="620"
         ResizeMode="CanResize"
         WindowStyle="None"
@@ -13,69 +13,98 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Topmost="True">
-    <Border Margin="10" Background="White" BorderBrush="#DADAE0" BorderThickness="1" CornerRadius="8">
+    <Border Margin="10"
+            Background="White"
+            BorderBrush="#DADAE0"
+            BorderThickness="1"
+            CornerRadius="7">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.16" Color="#202124" />
+            <DropShadowEffect BlurRadius="26"
+                              ShadowDepth="4"
+                              Opacity="0.16"
+                              Color="#202124" />
         </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="72" />
+                <RowDefinition Height="60" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="66" />
+                <RowDefinition Height="64" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="18,8,10,8" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            <Grid Grid.Row="0"
+                  Margin="16,7,10,7"
+                  MouseLeftButtonDown="Header_MouseLeftButtonDown">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="40" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Image Width="34" Height="34" HorizontalAlignment="Left" VerticalAlignment="Center" Source="Assets/AskAny-transparent.png" />
-                <TextBlock Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="19" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="设置" />
-                <Button Grid.Column="2" Style="{StaticResource IconButton}" ToolTip="关闭" Click="CloseButton_Click">
-                    <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="16" Text="&#xE711;" />
+                <Image Width="34"
+                       Height="34"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Center"
+                       Source="Assets/AskAny-transparent.png" />
+                <TextBlock Grid.Column="1"
+                           Margin="8,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource InkBrush}"
+                           Text="设置" />
+                <Button Grid.Column="2"
+                        Style="{StaticResource IconButton}"
+                        ToolTip="关闭"
+                        Click="CloseButton_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               FontSize="16"
+                               Text="&#xE711;" />
                 </Button>
             </Grid>
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="ProviderSidebarColumn" Width="220" />
-                    <ColumnDefinition x:Name="ProviderDividerColumn" Width="1" />
+                    <ColumnDefinition Width="200" />
+                    <ColumnDefinition Width="1" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border x:Name="ProviderSidebar" Grid.Column="0" Background="#FAFAFB">
-                    <Grid Margin="16,18,14,16">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock Style="{StaticResource SectionTitle}" Text="提供商" />
-                        <ListBox x:Name="ProviderList"
-                                 Grid.Row="1"
-                                 Margin="0,10,0,0"
+
+                <Border Grid.Column="0" Background="#F8F9FB">
+                    <StackPanel Margin="12,18,12,12">
+                        <TextBlock Margin="8,0,0,10"
+                                   Style="{StaticResource SectionTitle}"
+                                   Text="设置分类" />
+                        <ListBox x:Name="SettingsNav"
+                                 SelectedIndex="0"
                                  BorderThickness="0"
                                  Background="Transparent"
-                                 SelectionChanged="ProviderList_SelectionChanged">
+                                 SelectionChanged="SettingsNav_SelectionChanged">
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                    <Setter Property="Padding" Value="11,10" />
+                                    <Setter Property="Padding" Value="11,9" />
                                     <Setter Property="Margin" Value="0,2" />
+                                    <Setter Property="Cursor" Value="Hand" />
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="ListBoxItem">
-                                                <Border x:Name="ProviderRow" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="6">
+                                                <Border x:Name="NavRow"
+                                                        Padding="{TemplateBinding Padding}"
+                                                        Background="Transparent"
+                                                        BorderBrush="Transparent"
+                                                        BorderThickness="3,0,0,0"
+                                                        CornerRadius="4">
                                                     <ContentPresenter />
                                                 </Border>
                                                 <ControlTemplate.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ProviderRow" Property="Background" Value="#F0F2F5" />
+                                                        <Setter TargetName="NavRow" Property="Background" Value="#F0F2F5" />
                                                     </Trigger>
                                                     <Trigger Property="IsSelected" Value="True">
-                                                        <Setter TargetName="ProviderRow" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                                        <Setter TargetName="NavRow" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                                        <Setter TargetName="NavRow" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
@@ -83,55 +112,136 @@
                                     </Setter>
                                 </Style>
                             </ListBox.ItemContainerStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
+                            <ListBoxItem Content="模型服务" />
+                            <ListBoxItem Content="功能选项" />
+                            <ListBoxItem Content="推理与搜索" />
+                            <ListBoxItem Content="窗口与启动" />
                         </ListBox>
-                        <StackPanel Grid.Row="2" Margin="0,14,0,0">
-                            <TextBlock Style="{StaticResource SectionTitle}" Text="新增提供商" />
-                            <ComboBox x:Name="PresetComboBox"
-                                      Margin="0,8,0,0"
-                                      Height="36"
-                                      Background="White"
-                                      Style="{StaticResource ComboField}">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding Name}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <Grid Margin="0,8,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Button x:Name="AddProviderButton" Style="{StaticResource SecondaryButton}" Padding="12,8" Content="添加" Click="AddProviderButton_Click" />
-                                <Button x:Name="DeleteProviderButton" Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SecondaryButton}" Padding="12,8" Content="删除" Click="DeleteProviderButton_Click" />
-                            </Grid>
-                        </StackPanel>
-                    </Grid>
+                    </StackPanel>
                 </Border>
-                <Border x:Name="ProviderDivider" Grid.Column="1" Background="{StaticResource LineBrush}" />
+                <Border Grid.Column="1" Background="{StaticResource LineBrush}" />
 
-                <TabControl x:Name="SettingsTabs"
-                            Grid.Column="2"
-                            Margin="12,12,16,8"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            SelectionChanged="SettingsTabs_SelectionChanged">
-                    <TabItem Header="模型连接">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="20,16,20,20">
-                                <Border Style="{StaticResource CardBorder}" Padding="16,14">
+                <Grid Grid.Column="2">
+                    <Grid x:Name="ModelServicesPanel">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="230" />
+                            <ColumnDefinition Width="1" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Background="#FCFCFD">
+                            <Grid Margin="14,18,12,14">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="供应商" />
+                                <ListBox x:Name="ProviderList"
+                                         Grid.Row="1"
+                                         Margin="0,10,0,0"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         SelectionChanged="ProviderList_SelectionChanged">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Padding" Value="10,9" />
+                                            <Setter Property="Margin" Value="0,2" />
+                                            <Setter Property="Cursor" Value="Hand" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="ProviderRow"
+                                                                Padding="{TemplateBinding Padding}"
+                                                                Background="Transparent"
+                                                                BorderBrush="Transparent"
+                                                                BorderThickness="3,0,0,0"
+                                                                CornerRadius="4">
+                                                            <ContentPresenter />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="ProviderRow" Property="Background" Value="#F1F3F6" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="ProviderRow" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                                                <Setter TargetName="ProviderRow" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource InkBrush}"
+                                                       Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="新增供应商" />
+                                    <ComboBox x:Name="PresetComboBox"
+                                              Height="38"
+                                              Margin="0,8,0,0"
+                                              Background="White"
+                                              Style="{StaticResource ComboField}">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="AddProviderButton"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="12,8"
+                                                Content="添加"
+                                                Click="AddProviderButton_Click" />
+                                        <Button x:Name="DeleteProviderButton"
+                                                Grid.Column="1"
+                                                Margin="8,0,0,0"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="12,8"
+                                                Content="删除"
+                                                Click="DeleteProviderButton_Click" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Column="1" Background="{StaticResource LineBrush}" />
+
+                        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="22,18,22,20">
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource InkBrush}"
+                                           Text="模型服务配置" />
+                                <TextBlock Margin="0,4,0,0"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Text="配置当前供应商的连接参数和可用模型。" />
+
+                                <Border Style="{StaticResource CardBorder}"
+                                        Margin="0,16,0,0"
+                                        Padding="16,14">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource SectionTitle}" Text="连接信息" />
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="提供商名称" />
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="供应商名称" />
                                         <TextBox x:Name="ProviderNameBox" Style="{StaticResource FormField}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="API 协议" />
                                         <ComboBox x:Name="ProtocolComboBox"
-                                                  Height="36"
+                                                  Height="40"
                                                   Background="White"
                                                   Style="{StaticResource ComboField}">
                                             <ComboBox.ItemTemplate>
@@ -146,13 +256,16 @@
                                         <PasswordBox x:Name="ApiKeyBox" />
                                     </StackPanel>
                                 </Border>
-                                <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0" Padding="16,14">
+
+                                <Border Style="{StaticResource CardBorder}"
+                                        Margin="0,14,0,0"
+                                        Padding="16,14">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource SectionTitle}" Text="可用模型" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="模型列表（每行一个）" />
                                         <TextBox x:Name="ModelsBox"
-                                                 Height="110"
-                                                 Padding="10,8"
+                                                 Height="132"
+                                                 Padding="11,8"
                                                  AcceptsReturn="True"
                                                  TextWrapping="NoWrap"
                                                  VerticalContentAlignment="Top"
@@ -164,277 +277,360 @@
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="推理与搜索">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="20,16,20,20">
-                                <Border Style="{StaticResource CardBorder}" Padding="16,14">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitle}" Text="推理控制" />
-                                        <CheckBox x:Name="ReasoningCheck" Margin="0,10,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="启用推理强度控制" Checked="ReasoningCheck_Changed" Unchecked="ReasoningCheck_Changed" />
-                                        <Grid Margin="0,10,0,0">
+                    </Grid>
+
+                    <Grid x:Name="FunctionOptionsPanel"
+                          Margin="20,18,20,20"
+                          Visibility="Collapsed">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="230" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="功能列表" />
+                            <ListBox x:Name="FunctionEditorList"
+                                     Grid.Row="1"
+                                     Margin="0,10,0,0"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     SelectionChanged="FunctionEditorList_SelectionChanged">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <EventSetter Event="PreviewMouseLeftButtonDown"
+                                                     Handler="FunctionEditorItem_PreviewMouseLeftButtonDown" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="Padding" Value="10,9" />
+                                        <Setter Property="Margin" Value="0,2" />
+                                        <Setter Property="Cursor" Value="Hand" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ListBoxItem">
+                                                    <Border x:Name="FunctionRow"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            Background="Transparent"
+                                                            BorderBrush="Transparent"
+                                                            BorderThickness="3,0,0,0"
+                                                            CornerRadius="4">
+                                                        <ContentPresenter />
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="FunctionRow" Property="Background" Value="#F4F6F9" />
+                                                        </Trigger>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter TargetName="FunctionRow" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                                            <Setter TargetName="FunctionRow" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="30" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="推理强度" />
-                                            <ComboBox x:Name="ReasoningEffortComboBox" Grid.Column="1" Margin="14,0,0,0" Background="White" Style="{StaticResource ComboField}" />
-                                        </Grid>
-                                    </StackPanel>
-                                </Border>
-                                <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0" Padding="16,14">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitle}" Text="联网搜索" />
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="Tavily API Key" />
-                                        <PasswordBox x:Name="TavilyKeyBox" />
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </ScrollViewer>
-                    </TabItem>
-                    <TabItem Header="功能选项">
-                        <Grid Margin="20,16,20,20">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="238" />
-                                <ColumnDefinition Width="16" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <Grid Grid.Column="0">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-
-                                <TextBlock Style="{StaticResource SectionTitle}" Text="选项列表" />
-                                <ListBox x:Name="FunctionEditorList"
-                                         Grid.Row="1"
-                                         Margin="0,10,0,0"
-                                         BorderThickness="0"
-                                         Background="Transparent"
-                                         SelectionChanged="FunctionEditorList_SelectionChanged">
-                                    <ListBox.ItemContainerStyle>
-                                        <Style TargetType="ListBoxItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                            <Setter Property="Padding" Value="10,9" />
-                                            <Setter Property="Margin" Value="0,2" />
-                                            <Setter Property="Focusable" Value="False" />
-                                            <Setter Property="Template">
-                                                <Setter.Value>
-                                                    <ControlTemplate TargetType="ListBoxItem">
-                                                        <Border x:Name="FunctionRow"
-                                                                Padding="{TemplateBinding Padding}"
-                                                                Background="Transparent"
-                                                                BorderBrush="Transparent"
-                                                                BorderThickness="3,0,0,0"
-                                                                CornerRadius="4">
-                                                            <ContentPresenter />
-                                                        </Border>
-                                                        <ControlTemplate.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter TargetName="FunctionRow" Property="Background" Value="#F4F6F9" />
-                                                            </Trigger>
-                                                            <Trigger Property="IsSelected" Value="True">
-                                                                <Setter TargetName="FunctionRow" Property="Background" Value="{StaticResource AccentSoftBrush}" />
-                                                                <Setter TargetName="FunctionRow" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                                                            </Trigger>
-                                                        </ControlTemplate.Triggers>
-                                                    </ControlTemplate>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </ListBox.ItemContainerStyle>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="30" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Width="24"
-                                                        Height="24"
-                                                        HorizontalAlignment="Left"
-                                                        VerticalAlignment="Center"
-                                                        Background="White"
-                                                        CornerRadius="4">
-                                                    <TextBlock HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"
-                                                               FontFamily="Segoe MDL2 Assets"
-                                                               FontSize="13"
-                                                               Foreground="{StaticResource AccentBrush}"
-                                                               Text="{Binding Glyph}" />
-                                                </Border>
-                                                <TextBlock Grid.Column="1"
-                                                           Margin="8,0,0,0"
+                                            <Border Width="24"
+                                                    Height="24"
+                                                    HorizontalAlignment="Left"
+                                                    VerticalAlignment="Center"
+                                                    Background="White"
+                                                    CornerRadius="4">
+                                                <TextBlock HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"
+                                                           FontFamily="Segoe MDL2 Assets"
                                                            FontSize="13"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{StaticResource InkBrush}"
-                                                           Text="{Binding Name}"
-                                                           TextTrimming="CharacterEllipsis" />
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
+                                                           Foreground="{StaticResource AccentBrush}"
+                                                           Text="{Binding Glyph}" />
+                                            </Border>
+                                            <TextBlock Grid.Column="1"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource InkBrush}"
+                                                       Text="{Binding Name}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
 
-                                <StackPanel Grid.Row="2" Margin="0,12,0,0">
-                                    <Button x:Name="AddFunctionButton"
+                            <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                                <Button x:Name="AddFunctionButton"
+                                        Style="{StaticResource SecondaryButton}"
+                                        Padding="12,8"
+                                        Content="新增选项"
+                                        Click="AddFunctionButton_Click" />
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button x:Name="MoveFunctionUpButton"
                                             Style="{StaticResource SecondaryButton}"
-                                            Padding="12,8"
-                                            Content="新增选项"
-                                            Click="AddFunctionButton_Click" />
-                                    <Grid Margin="0,8,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="*" />
-                                        </Grid.ColumnDefinitions>
-                                        <Button x:Name="MoveFunctionUpButton"
-                                                Style="{StaticResource SecondaryButton}"
-                                                Padding="6,8"
-                                                Content="上移"
-                                                Click="MoveFunctionUpButton_Click" />
-                                        <Button x:Name="MoveFunctionDownButton"
-                                                Grid.Column="1"
-                                                Margin="6,0,0,0"
-                                                Style="{StaticResource SecondaryButton}"
-                                                Padding="6,8"
-                                                Content="下移"
-                                                Click="MoveFunctionDownButton_Click" />
-                                        <Button x:Name="DeleteFunctionButton"
-                                                Grid.Column="2"
-                                                Margin="6,0,0,0"
-                                                Style="{StaticResource SecondaryButton}"
-                                                Padding="6,8"
-                                                Content="删除"
-                                                Click="DeleteFunctionButton_Click" />
-                                    </Grid>
-                                </StackPanel>
-                            </Grid>
-
-                            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-                                <StackPanel>
-                                    <Border Style="{StaticResource CardBorder}" Padding="16,14">
-                                        <StackPanel>
-                                            <TextBlock Style="{StaticResource SectionTitle}" Text="显示与行为" />
-                                            <TextBlock Style="{StaticResource FieldLabel}" Text="选项名称" />
-                                            <TextBox x:Name="FunctionNameBox" Style="{StaticResource FormField}" />
-                                            <TextBlock Style="{StaticResource FieldLabel}" Text="图标" />
-                                            <ComboBox x:Name="FunctionGlyphComboBox"
-                                                      Height="38"
-                                                      Background="White"
-                                                      Style="{StaticResource ComboField}">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <StackPanel Orientation="Horizontal">
-                                                            <TextBlock Width="20"
-                                                                       VerticalAlignment="Center"
-                                                                       FontFamily="Segoe MDL2 Assets"
-                                                                       Foreground="{StaticResource AccentBrush}"
-                                                                       Text="{Binding Glyph}" />
-                                                            <TextBlock Margin="7,0,0,0"
-                                                                       VerticalAlignment="Center"
-                                                                       Text="{Binding Name}" />
-                                                        </StackPanel>
-                                                    </DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
-                                            <TextBlock Style="{StaticResource FieldLabel}" Text="执行方式" />
-                                            <ComboBox x:Name="FunctionModeComboBox"
-                                                      Height="38"
-                                                      Background="White"
-                                                      Style="{StaticResource ComboField}">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <TextBlock Text="{Binding Name}" />
-                                                    </DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
-                                            <TextBlock Margin="0,8,0,0"
-                                                       FontSize="11.5"
-                                                       Foreground="{StaticResource MutedBrush}"
-                                                       Text="联网与思考由执行方式决定，不会在其他选项中启用。" />
-                                        </StackPanel>
-                                    </Border>
-
-                                    <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0" Padding="16,14">
-                                        <StackPanel>
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock Style="{StaticResource SectionTitle}" Text="系统提示词" />
-                                                    <TextBlock Margin="0,4,0,0"
-                                                               FontSize="11.5"
-                                                               Foreground="{StaticResource MutedBrush}"
-                                                               Text="定义此选项的角色、回答风格和输出要求。" />
-                                                </StackPanel>
-                                                <Button x:Name="ResetFunctionPromptButton"
-                                                        Grid.Column="1"
-                                                        VerticalAlignment="Center"
-                                                        Style="{StaticResource SecondaryButton}"
-                                                        Padding="10,6"
-                                                        Content="恢复默认"
-                                                        Click="ResetFunctionPromptButton_Click" />
-                                            </Grid>
-                                            <TextBox x:Name="FunctionPromptBox"
-                                                     Height="210"
-                                                     Margin="0,12,0,0"
-                                                     Padding="11,9"
-                                                     AcceptsReturn="True"
-                                                     TextWrapping="Wrap"
-                                                     VerticalContentAlignment="Top"
-                                                     VerticalScrollBarVisibility="Auto"
-                                                     FontSize="13"
-                                                     Style="{StaticResource FormField}" />
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                            </ScrollViewer>
+                                            Padding="6,8"
+                                            Content="上移"
+                                            Click="MoveFunctionUpButton_Click" />
+                                    <Button x:Name="MoveFunctionDownButton"
+                                            Grid.Column="1"
+                                            Margin="6,0,0,0"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Padding="6,8"
+                                            Content="下移"
+                                            Click="MoveFunctionDownButton_Click" />
+                                    <Button x:Name="DeleteFunctionButton"
+                                            Grid.Column="2"
+                                            Margin="6,0,0,0"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Padding="6,8"
+                                            Content="删除"
+                                            Click="DeleteFunctionButton_Click" />
+                                </Grid>
+                            </StackPanel>
                         </Grid>
-                    </TabItem>
-                    <TabItem Header="窗口偏好">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <StackPanel Margin="20,16,20,20">
-                                <Border Style="{StaticResource CardBorder}" Padding="16,14">
+
+                        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock FontSize="18"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource InkBrush}"
+                                           Text="功能选项" />
+                                <TextBlock Margin="0,4,0,0"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedBrush}"
+                                           Text="选择左侧功能后，编辑它的名称、图标、执行方式和系统提示词。" />
+
+                                <Border Style="{StaticResource CardBorder}"
+                                        Margin="0,16,0,0"
+                                        Padding="16,14">
                                     <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitle}" Text="窗口行为" />
-                                        <CheckBox x:Name="TopMostCheck" Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="窗口始终置顶" />
-                                        <CheckBox x:Name="HideWhenDeactivatedCheck" Margin="0,2,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="失去焦点后自动隐藏" />
+                                        <TextBlock Style="{StaticResource SectionTitle}" Text="显示与行为" />
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="选项名称" />
+                                        <TextBox x:Name="FunctionNameBox" Style="{StaticResource FormField}" />
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="图标" />
+                                        <ComboBox x:Name="FunctionGlyphComboBox"
+                                                  Height="40"
+                                                  Background="White"
+                                                  Style="{StaticResource ComboField}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Width="20"
+                                                                   VerticalAlignment="Center"
+                                                                   FontFamily="Segoe MDL2 Assets"
+                                                                   Foreground="{StaticResource AccentBrush}"
+                                                                   Text="{Binding Glyph}" />
+                                                        <TextBlock Margin="7,0,0,0"
+                                                                   VerticalAlignment="Center"
+                                                                   Text="{Binding Name}" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="执行方式" />
+                                        <ComboBox x:Name="FunctionModeComboBox"
+                                                  Height="40"
+                                                  Background="White"
+                                                  Style="{StaticResource ComboField}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <TextBlock Margin="0,8,0,0"
+                                                   FontSize="11.5"
+                                                   Foreground="{StaticResource MutedBrush}"
+                                                   Text="联网与思考由执行方式决定，不会在其他选项中启用。" />
                                     </StackPanel>
                                 </Border>
-                                <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0" Padding="16,14">
+
+                                <Border Style="{StaticResource CardBorder}"
+                                        Margin="0,14,0,0"
+                                        Padding="16,14">
                                     <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitle}" Text="启动" />
-                                        <CheckBox x:Name="StartWithWindowsCheck" Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="开机时自动启动" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0" Padding="16,14">
-                                    <StackPanel>
-                                        <TextBlock Style="{StaticResource SectionTitle}" Text="输入" />
-                                        <CheckBox x:Name="AutoFillSelectionCheck" Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="自动填入选中文字" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource SectionTitle}" Text="系统提示词" />
+                                                <TextBlock Margin="0,4,0,0"
+                                                           FontSize="11.5"
+                                                           Foreground="{StaticResource MutedBrush}"
+                                                           Text="定义此选项的角色、回答风格和输出要求。" />
+                                            </StackPanel>
+                                            <Button x:Name="ResetFunctionPromptButton"
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Padding="10,6"
+                                                    Content="恢复默认"
+                                                    Click="ResetFunctionPromptButton_Click" />
+                                        </Grid>
+                                        <TextBox x:Name="FunctionPromptBox"
+                                                 Height="230"
+                                                 Margin="0,12,0,0"
+                                                 Padding="11,9"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="Wrap"
+                                                 VerticalContentAlignment="Top"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 FontSize="13"
+                                                 Style="{StaticResource FormField}" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
-                    </TabItem>
-                </TabControl>
+                    </Grid>
+
+                    <ScrollViewer x:Name="ReasoningSearchPanel"
+                                  Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="22,18,22,20">
+                            <TextBlock FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource InkBrush}"
+                                       Text="推理与搜索" />
+                            <TextBlock Margin="0,4,0,0"
+                                       FontSize="12"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Text="设置模型推理强度和联网搜索凭据。" />
+                            <Border Style="{StaticResource CardBorder}"
+                                    Margin="0,16,0,0"
+                                    Padding="16,14">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="推理控制" />
+                                    <CheckBox x:Name="ReasoningCheck"
+                                              Margin="0,10,0,0"
+                                              FontSize="13"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Content="启用推理强度控制"
+                                              Checked="ReasoningCheck_Changed"
+                                              Unchecked="ReasoningCheck_Changed" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="推理强度" />
+                                    <ComboBox x:Name="ReasoningEffortComboBox"
+                                              Width="180"
+                                              Height="40"
+                                              HorizontalAlignment="Left"
+                                              Background="White"
+                                              Style="{StaticResource ComboField}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardBorder}"
+                                    Margin="0,14,0,0"
+                                    Padding="16,14">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="联网搜索" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Tavily API Key" />
+                                    <PasswordBox x:Name="TavilyKeyBox" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <ScrollViewer x:Name="WindowPreferencesPanel"
+                                  Visibility="Collapsed"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="22,18,22,20">
+                            <TextBlock FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource InkBrush}"
+                                       Text="窗口与启动" />
+                            <TextBlock Margin="0,4,0,0"
+                                       FontSize="12"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Text="控制主窗口的显示方式和系统启动行为。" />
+                            <Border Style="{StaticResource CardBorder}"
+                                    Margin="0,16,0,0"
+                                    Padding="16,14">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="窗口行为" />
+                                    <CheckBox x:Name="TopMostCheck"
+                                              Margin="0,8,0,0"
+                                              FontSize="13"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Content="窗口始终置顶" />
+                                    <CheckBox x:Name="HideWhenDeactivatedCheck"
+                                              Margin="0,2,0,0"
+                                              FontSize="13"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Content="失去焦点后自动隐藏" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardBorder}"
+                                    Margin="0,14,0,0"
+                                    Padding="16,14">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="启动" />
+                                    <CheckBox x:Name="StartWithWindowsCheck"
+                                              Margin="0,8,0,0"
+                                              FontSize="13"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Content="开机时自动启动" />
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardBorder}"
+                                    Margin="0,14,0,0"
+                                    Padding="16,14">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource SectionTitle}" Text="输入" />
+                                    <CheckBox x:Name="AutoFillSelectionCheck"
+                                              Margin="0,8,0,0"
+                                              FontSize="13"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Content="自动填入选中文字" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
             </Grid>
 
-            <Grid Grid.Row="3" Margin="18,9">
+            <Grid Grid.Row="3" Margin="16,8">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="SettingsStatusText" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
-                <Button x:Name="TestButton" Grid.Column="1" Margin="0,0,9,0" Style="{StaticResource SecondaryButton}" Content="测试连接" Click="TestButton_Click" />
-                <Button Grid.Column="2" MinWidth="84" Margin="0,0,9,0" Style="{StaticResource SecondaryButton}" Content="取消" Click="CloseButton_Click" />
-                <Button x:Name="SaveButton" Grid.Column="3" MinWidth="90" Style="{StaticResource PrimaryButton}" Content="保存" Click="SaveButton_Click" />
+                <TextBlock x:Name="SettingsStatusText"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{StaticResource MutedBrush}"
+                           TextTrimming="CharacterEllipsis" />
+                <Button x:Name="TestButton"
+                        Grid.Column="1"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButton}"
+                        Content="测试连接"
+                        Click="TestButton_Click" />
+                <Button Grid.Column="2"
+                        MinWidth="80"
+                        Margin="0,0,8,0"
+                        Style="{StaticResource SecondaryButton}"
+                        Content="取消"
+                        Click="CloseButton_Click" />
+                <Button x:Name="SaveButton"
+                        Grid.Column="3"
+                        MinWidth="88"
+                        Style="{StaticResource PrimaryButton}"
+                        Content="保存"
+                        Click="SaveButton_Click" />
             </Grid>
         </Grid>
     </Border>

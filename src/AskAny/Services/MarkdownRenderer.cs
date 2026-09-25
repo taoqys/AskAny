@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using WpfMath.Controls;
 
 namespace AskAny.Services;
 
@@ -100,6 +102,14 @@ public static partial class MarkdownRenderer
             {
                 FlushParagraph();
                 FlushList();
+                continue;
+            }
+
+            if (TryReadDisplayMath(lines, ref index, out var latex))
+            {
+                FlushParagraph();
+                FlushList();
+                document.Blocks.Add(CreateMathParagraph(latex));
                 continue;
             }
 
@@ -361,6 +371,15 @@ public static partial class MarkdownRenderer
         return paragraph;
     }
 
+    private static Paragraph CreateMathParagraph(string latex)
+    {
+        var paragraph = CreateParagraph();
+        paragraph.TextAlignment = TextAlignment.Center;
+        paragraph.Margin = new Thickness(0, 8, 0, 10);
+        AddLatexInline(paragraph, latex, true);
+        return paragraph;
+    }
+
     private static void AddInline(Paragraph paragraph, string text)
     {
         var position = 0;
@@ -383,6 +402,10 @@ public static partial class MarkdownRenderer
                     FontFamily = new FontFamily("Cascadia Mono, Consolas"),
                     Background = CodeBrush
                 });
+            }
+            else if (TryGetInlineLatex(token, out var latex))
+            {
+                AddLatexInline(paragraph, latex, false);
             }
             else if (token.StartsWith('[') && LinkRegex().IsMatch(token))
             {
@@ -424,6 +447,129 @@ public static partial class MarkdownRenderer
         }
     }
 
+    private static void AddLatexInline(Paragraph paragraph, string latex, bool isDisplay)
+    {
+        try
+        {
+            var formula = new FormulaControl
+            {
+                Formula = latex.Trim(),
+                Scale = isDisplay ? 18d : 15d,
+                SystemTextFontName = "Cambria Math",
+                Foreground = InkBrush,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = isDisplay
+                    ? new Thickness(0, 1, 0, 1)
+                    : new Thickness(2, 0, 2, 0)
+            };
+
+            if (formula.HasError)
+            {
+                AddLatexFallback(paragraph, latex);
+                return;
+            }
+
+            paragraph.Inlines.Add(new InlineUIContainer(formula)
+            {
+                BaselineAlignment = isDisplay
+                    ? BaselineAlignment.Center
+                    : BaselineAlignment.Baseline
+            });
+        }
+        catch (Exception)
+        {
+            AddLatexFallback(paragraph, latex);
+        }
+    }
+
+    private static void AddLatexFallback(Paragraph paragraph, string latex)
+    {
+        paragraph.Inlines.Add(new Run($" {latex} ")
+        {
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+            Foreground = MutedBrush,
+            Background = CodeBrush
+        });
+    }
+
+    private static bool TryGetInlineLatex(string token, out string latex)
+    {
+        if (token.StartsWith("\\(", StringComparison.Ordinal) &&
+            token.EndsWith("\\)", StringComparison.Ordinal))
+        {
+            latex = token[2..^2];
+            return true;
+        }
+
+        if (token.StartsWith('$') && token.EndsWith('$') && token.Length > 2)
+        {
+            latex = token[1..^1];
+            return true;
+        }
+
+        latex = string.Empty;
+        return false;
+    }
+
+    private static bool TryReadDisplayMath(
+        string[] lines,
+        ref int index,
+        out string latex)
+    {
+        var firstLine = lines[index].Trim();
+        const string dollarDelimiter = "$$";
+        const string bracketOpen = "\\[";
+        const string bracketClose = "\\]";
+
+        var open = firstLine.StartsWith(dollarDelimiter, StringComparison.Ordinal)
+            ? dollarDelimiter
+            : firstLine.StartsWith(bracketOpen, StringComparison.Ordinal)
+                ? bracketOpen
+                : string.Empty;
+        var close = open == dollarDelimiter ? dollarDelimiter : bracketClose;
+        if (open.Length == 0)
+        {
+            latex = string.Empty;
+            return false;
+        }
+
+        if (firstLine.Length >= open.Length + close.Length &&
+            firstLine.EndsWith(close, StringComparison.Ordinal))
+        {
+            latex = firstLine[open.Length..^close.Length].Trim();
+            return latex.Length > 0;
+        }
+
+        var builder = new StringBuilder(firstLine[open.Length..]);
+        for (var candidateIndex = index + 1; candidateIndex < lines.Length; candidateIndex++)
+        {
+            var candidate = lines[candidateIndex];
+            var closingIndex = candidate.IndexOf(close, StringComparison.Ordinal);
+            if (closingIndex >= 0)
+            {
+                if (builder.Length > 0)
+                {
+                    builder.AppendLine();
+                }
+
+                builder.Append(candidate[..closingIndex]);
+                latex = builder.ToString().Trim();
+                index = candidateIndex;
+                return latex.Length > 0;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.AppendLine();
+            }
+
+            builder.Append(candidate);
+        }
+
+        latex = string.Empty;
+        return false;
+    }
+
     [GeneratedRegex(@"^(#{1,4})\s+(.+)$")]
     private static partial Regex HeadingRegex();
 
@@ -436,7 +582,7 @@ public static partial class MarkdownRenderer
     [GeneratedRegex(@"^\s*([-*_])(?:\s*\1){2,}\s*$")]
     private static partial Regex HorizontalRuleRegex();
 
-    [GeneratedRegex(@"(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|\*[^*]+\*)")]
+    [GeneratedRegex(@"(\\\([^\r\n]+?\\\)|\$[^$\r\n]+?\$|\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\)|\*[^*]+\*)")]
     private static partial Regex InlineRegex();
 
     [GeneratedRegex(@"^\[([^\]]+)\]\(([^)]+)\)$")]
