@@ -117,7 +117,16 @@
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0"
+                           Margin="18,10,12,2"
+                           Style="{StaticResource SectionTitle}"
+                           Text="选择方式" />
                 <ListBox x:Name="FunctionList"
+                         Grid.Row="1"
                          Margin="12,10"
                          BorderThickness="0"
                          Background="Transparent"
@@ -208,6 +217,7 @@
                 </ListBox>
 
                 <Grid x:Name="ResponsePanel"
+                      Grid.Row="1"
                       Margin="14,10"
                       Visibility="Collapsed">
                     <Grid.RowDefinitions>
@@ -324,6 +334,7 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal"
@@ -352,8 +363,14 @@
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
+                <TextBlock Grid.Column="1"
+                           Margin="0,0,6,0"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="模型" />
                 <ComboBox x:Name="ModelComboBox"
-                          Grid.Column="1"
+                          Grid.Column="2"
                           Width="230"
                           Height="34"
                           Margin="0,0,6,0"
@@ -365,7 +382,7 @@
                           SelectionChanged="ModelComboBox_SelectionChanged"
                           LostKeyboardFocus="ModelComboBox_LostKeyboardFocus" />
 
-                <Button Grid.Column="2"
+                <Button Grid.Column="3"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="HistoryButton"
                         ToolTip="历史记录"
@@ -376,7 +393,7 @@
                 </Button>
 
                 <Button x:Name="PinButton"
-                        Grid.Column="3"
+                        Grid.Column="4"
                         Style="{StaticResource IconButton}"
                         ToolTip="取消窗口置顶"
                         Click="PinButton_Click">
@@ -388,7 +405,7 @@
                                Text="&#xE77A;" />
                 </Button>
 
-                <Button Grid.Column="4"
+                <Button Grid.Column="5"
                         Style="{StaticResource IconButton}"
                         ToolTip="退出 AskAny"
                         Click="ExitButton_Click">
