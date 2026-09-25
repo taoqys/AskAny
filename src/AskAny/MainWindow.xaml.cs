@@ -136,7 +136,7 @@ public partial class MainWindow : Window
 
         if (ResponsePanel.Visibility == Visibility.Visible)
         {
-            if (e.Key == Key.Left)
+            if (e.Key == Key.Left && !_isRunning)
             {
                 ShowWorkflowList();
                 e.Handled = true;
@@ -709,6 +709,11 @@ public partial class MainWindow : Window
 
     private void ShowWorkflowList()
     {
+        if (_isRunning)
+        {
+            return;
+        }
+
         _conversation.Clear();
         _activeFunction = null;
         _isFollowUpInput = false;

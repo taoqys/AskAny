@@ -10,7 +10,7 @@
     <AssemblyName>AskAny</AssemblyName>
     <RootNamespace>AskAny</RootNamespace>
     <ApplicationIcon>Assets\AskAny.ico</ApplicationIcon>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <SelfContained>false</SelfContained>
   </PropertyGroup>
