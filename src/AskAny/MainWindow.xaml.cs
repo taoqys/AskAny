@@ -89,11 +89,8 @@ public partial class MainWindow : Window
 
         ResetForNewRequest();
 
-        var location = CursorPlacementService.GetPopupLocation(this);
-        Left = location.X;
-        Top = location.Y;
-
         Show();
+        CursorPlacementService.PlaceWindow(this);
         WindowState = WindowState.Normal;
         Activate();
         Topmost = true;

@@ -1,58 +1,65 @@
 using System.Runtime.InteropServices;
 using System.Windows;
-using System.Windows.Media;
+using System.Windows.Interop;
+using Forms = System.Windows.Forms;
 
 namespace AskAny.Native;
 
 public static class CursorPlacementService
 {
-    private const uint MonitorDefaultToNearest = 2;
     private const int Offset = 12;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
 
-    public static Point GetPopupLocation(Window window)
+    public static void PlaceWindow(Window window)
     {
-        if (!GetCursorPos(out var cursorPoint))
+        var windowHandle = new WindowInteropHelper(window).Handle;
+        if (windowHandle == IntPtr.Zero ||
+            !GetCursorPos(out var cursor) ||
+            !GetWindowRect(windowHandle, out var windowRect))
         {
-            return GetFallbackLocation(window);
+            return;
         }
 
-        var monitor = MonitorFromPoint(cursorPoint, MonitorDefaultToNearest);
-        var monitorInfo = new MonitorInfo
-        {
-            Size = Marshal.SizeOf<MonitorInfo>()
-        };
-        var workArea = GetMonitorInfo(monitor, ref monitorInfo)
-            ? monitorInfo.WorkArea
-            : new Rect(0, 0, (int)SystemParameters.PrimaryScreenWidth, (int)SystemParameters.PrimaryScreenHeight);
+        var screen = Forms.Screen.FromPoint(new System.Drawing.Point(cursor.X, cursor.Y));
+        var workArea = screen.WorkingArea;
+        var width = windowRect.Right - windowRect.Left;
+        var height = windowRect.Bottom - windowRect.Top;
+        var minX = workArea.Left + 8;
+        var minY = workArea.Top + 8;
+        var maxX = Math.Max(minX, workArea.Right - width - 8);
+        var maxY = Math.Max(minY, workArea.Bottom - height - 8);
 
-        var dpi = VisualTreeHelper.GetDpi(window);
-        var left = workArea.Left / dpi.DpiScaleX;
-        var top = workArea.Top / dpi.DpiScaleY;
-        var right = workArea.Right / dpi.DpiScaleX;
-        var bottom = workArea.Bottom / dpi.DpiScaleY;
-        var cursorX = cursorPoint.X / dpi.DpiScaleX;
-        var cursorY = cursorPoint.Y / dpi.DpiScaleY;
-        var width = window.ActualWidth > 0 ? window.ActualWidth : window.Width;
-        var height = window.ActualHeight > 0 ? window.ActualHeight : window.Height;
-
-        var minX = left + 8;
-        var minY = top + 8;
-        var maxX = Math.Max(minX, right - width - 8);
-        var maxY = Math.Max(minY, bottom - height - 8);
         var candidates = new[]
         {
-            new Point(cursorX + Offset, cursorY + Offset),
-            new Point(cursorX - width - Offset, cursorY + Offset),
-            new Point(cursorX + Offset, cursorY - height - Offset),
-            new Point(cursorX - width - Offset, cursorY - height - Offset)
+            new Point(cursor.X + Offset, cursor.Y + Offset),
+            new Point(cursor.X - width - Offset, cursor.Y + Offset),
+            new Point(cursor.X + Offset, cursor.Y - height - Offset),
+            new Point(cursor.X - width - Offset, cursor.Y - height - Offset)
         };
 
-        return candidates
+        var location = candidates
             .Select(candidate => new Point(
                 Math.Clamp(candidate.X, minX, maxX),
                 Math.Clamp(candidate.Y, minY, maxY)))
-            .OrderBy(candidate => DistanceToRectangle(candidate.X, candidate.Y, width, height, cursorX, cursorY))
+            .OrderBy(candidate => DistanceToRectangle(
+                candidate.X,
+                candidate.Y,
+                width,
+                height,
+                cursor.X,
+                cursor.Y))
             .First();
+
+        SetWindowPos(
+            windowHandle,
+            IntPtr.Zero,
+            (int)Math.Round(location.X),
+            (int)Math.Round(location.Y),
+            0,
+            0,
+            SwpNoSize | SwpNoZOrder | SwpNoActivate);
     }
 
     private static double DistanceToRectangle(
@@ -66,14 +73,6 @@ public static class CursorPlacementService
         var dx = Math.Max(Math.Max(x - cursorX, cursorX - (x + width)), 0);
         var dy = Math.Max(Math.Max(y - cursorY, cursorY - (y + height)), 0);
         return (dx * dx) + (dy * dy);
-    }
-
-    private static Point GetFallbackLocation(Window window)
-    {
-        var workArea = SystemParameters.WorkArea;
-        return new Point(
-            workArea.Left + Math.Max(12, (workArea.Width - window.Width) / 2),
-            workArea.Top + Math.Max(12, (workArea.Height - window.Height) / 3));
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -90,24 +89,6 @@ public static class CursorPlacementService
         public int Top;
         public int Right;
         public int Bottom;
-
-        public static implicit operator Rect(NativeRect rectangle)
-        {
-            return new Rect(
-                rectangle.Left,
-                rectangle.Top,
-                rectangle.Right - rectangle.Left,
-                rectangle.Bottom - rectangle.Top);
-        }
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct MonitorInfo
-    {
-        public int Size;
-        public NativeRect Monitor;
-        public NativeRect WorkArea;
-        public uint Flags;
     }
 
     [DllImport("user32.dll")]
@@ -115,13 +96,17 @@ public static class CursorPlacementService
     private static extern bool GetCursorPos(out NativePoint point);
 
     [DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromPoint(
-        NativePoint point,
-        uint flags);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetMonitorInfo(
-        IntPtr monitor,
-        ref MonitorInfo monitorInfo);
+    private static extern bool GetWindowRect(IntPtr windowHandle, out NativeRect rectangle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr windowHandle,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
 }
