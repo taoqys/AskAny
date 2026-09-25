@@ -20,14 +20,7 @@ public partial class MainWindow : Window
     private readonly AiService _aiService;
     private readonly SearchService _searchService;
     private readonly HistoryService _historyService;
-    private readonly IReadOnlyList<FunctionOption> _functions =
-    [
-        new(WorkflowMode.Answer, "回答此问题", "直接、准确地解答当前问题", "\uE8BD", 0, -3.5),
-        new(WorkflowMode.Explain, "解释说明", "拆解概念、背景和关键要点", "\uE946", 0.5, -2.5),
-        new(WorkflowMode.TrackNews, "新闻追踪", "搜索最近动态并整理事件脉络", "\uE909", 0, -2.5),
-        new(WorkflowMode.Think, "深度思考", "仅此模式请求模型的扩展推理", "\uE735", 0, -3.5),
-        new(WorkflowMode.ExplainOnline, "联网解释", "结合网络资料解释问题并标注来源", "\uE774", 0, -2.5)
-    ];
+    private List<FunctionOption> _functions = FunctionCatalog.CreateDefaultFunctions();
 
     private AppConfig _config = new();
     private ProviderConfig? _currentProvider;
@@ -69,6 +62,7 @@ public partial class MainWindow : Window
     private async Task LoadConfigurationAsync()
     {
         _config = await _configService.LoadAsync();
+        RefreshFunctions();
 
         if (StartupService.IsEnabled() != _config.StartWithWindows)
         {
@@ -485,7 +479,7 @@ public partial class MainWindow : Window
             }
 
             var result = await _aiService.ExecuteAsync(
-                option.Mode,
+                option,
                 prompt,
                 provider,
                 ConfigService.Unprotect(provider.ApiKeyProtected),
@@ -506,6 +500,7 @@ public partial class MainWindow : Window
 
             await _historyService.AddAsync(new HistoryEntry
             {
+                FunctionId = option.Id,
                 Mode = option.Mode,
                 ModeName = option.Name,
                 ProviderName = provider.Name,
@@ -745,7 +740,10 @@ public partial class MainWindow : Window
             {
                 PromptBox.Text = entry.Prompt;
                 FunctionList.SelectedItem = _functions.FirstOrDefault(
-                    function => function.Mode == entry.Mode);
+                                        function => function.Id == entry.FunctionId)
+                                    ?? _functions.FirstOrDefault(
+                                        function => function.Mode == entry.Mode)
+                                    ?? _functions.FirstOrDefault();
                 ShowWorkflowList();
                 PromptBox.Focus();
             }
@@ -802,6 +800,20 @@ public partial class MainWindow : Window
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
+    }
+
+    private void RefreshFunctions()
+    {
+        var selectedId = (FunctionList.SelectedItem as FunctionOption)?.Id;
+        _functions = _config.Functions.Count == 0
+            ? FunctionCatalog.CreateDefaultFunctions()
+            : _config.Functions.Select(function => function.Clone()).ToList();
+
+        FunctionList.ItemsSource = null;
+        FunctionList.ItemsSource = _functions;
+        FunctionList.SelectedItem = _functions.FirstOrDefault(
+                                        function => function.Id == selectedId)
+                                    ?? _functions.FirstOrDefault();
     }
 
     private void SetResponsePromptDisplay(string prompt)

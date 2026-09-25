@@ -13,7 +13,7 @@ public sealed class AiService
     }
 
     public async Task<AiResult> ExecuteAsync(
-        WorkflowMode mode,
+        FunctionOption function,
         string prompt,
         ProviderConfig provider,
         string apiKey,
@@ -31,10 +31,10 @@ public sealed class AiService
             throw new InvalidOperationException("请先在窗口底部选择模型。");
         }
 
-        var systemPrompt = BuildSystemPrompt(mode, search);
+        var systemPrompt = BuildSystemPrompt(function, search);
         var endpoint = BuildEndpoint(provider.BaseUri, provider.Protocol);
         var requestBody = BuildRequestBody(
-            mode,
+            function,
             prompt,
             provider,
             systemPrompt,
@@ -72,7 +72,7 @@ public sealed class AiService
         CancellationToken cancellationToken = default)
     {
         await ExecuteAsync(
-            WorkflowMode.Answer,
+            FunctionCatalog.CreateDefaultFunctions()[0],
             "只回复“连接成功”四个字。",
             provider,
             apiKey,
@@ -82,13 +82,13 @@ public sealed class AiService
     }
 
     private static object BuildRequestBody(
-        WorkflowMode mode,
+        FunctionOption function,
         string prompt,
         ProviderConfig provider,
         string systemPrompt,
         IReadOnlyList<ConversationTurn>? conversation)
     {
-        var isThinking = mode == WorkflowMode.Think;
+        var isThinking = function.Mode == WorkflowMode.Think;
 
         if (provider.Protocol == ApiProtocol.Responses)
         {
@@ -252,22 +252,11 @@ public sealed class AiService
         };
     }
 
-    private static string BuildSystemPrompt(WorkflowMode mode, SearchPacket? search)
+    private static string BuildSystemPrompt(FunctionOption function, SearchPacket? search)
     {
-        var role = mode switch
-        {
-            WorkflowMode.Answer =>
-                "你是一个严谨、直接的中文 AI 助手。优先给出可执行、准确、简洁的回答。",
-            WorkflowMode.Explain =>
-                "你是一位善于表达的中文教师。用清晰、通俗的方式解释概念，按必要性给出定义、背景、例子和易错点。",
-            WorkflowMode.TrackNews =>
-                "你是中文新闻分析助手。根据提供的最新检索资料整理事件动态，按重要性组织内容，区分事实、背景和可能影响。",
-            WorkflowMode.Think =>
-                "你是严谨的中文分析助手。给出必要的分析要点，再明确写出最终结论。不要虚构不确定信息。",
-            WorkflowMode.ExplainOnline =>
-                "你是中文研究型解释助手。结合提供的联网检索资料解释问题，明确区分资料事实、推断和你的结论。",
-            _ => "你是一个中文 AI 助手。"
-        };
+        var role = string.IsNullOrWhiteSpace(function.SystemPrompt)
+            ? FunctionCatalog.GetDefaultSystemPrompt(function.Mode)
+            : function.SystemPrompt.Trim();
 
         if (search is null)
         {

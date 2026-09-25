@@ -41,11 +41,11 @@
 
             <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="220" />
-                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition x:Name="ProviderSidebarColumn" Width="220" />
+                    <ColumnDefinition x:Name="ProviderDividerColumn" Width="1" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0" Background="#FAFAFB">
+                <Border x:Name="ProviderSidebar" Grid.Column="0" Background="#FAFAFB">
                     <Grid Margin="16,18,14,16">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -91,7 +91,17 @@
                         </ListBox>
                         <StackPanel Grid.Row="2" Margin="0,14,0,0">
                             <TextBlock Style="{StaticResource SectionTitle}" Text="新增提供商" />
-                            <ComboBox x:Name="PresetComboBox" Margin="0,8,0,0" Height="36" DisplayMemberPath="Name" Background="White" Style="{StaticResource ComboField}" />
+                            <ComboBox x:Name="PresetComboBox"
+                                      Margin="0,8,0,0"
+                                      Height="36"
+                                      Background="White"
+                                      Style="{StaticResource ComboField}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -103,9 +113,14 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-                <Border Grid.Column="1" Background="{StaticResource LineBrush}" />
+                <Border x:Name="ProviderDivider" Grid.Column="1" Background="{StaticResource LineBrush}" />
 
-                <TabControl x:Name="SettingsTabs" Grid.Column="2" Margin="12,12,16,8" Background="Transparent" BorderThickness="0">
+                <TabControl x:Name="SettingsTabs"
+                            Grid.Column="2"
+                            Margin="12,12,16,8"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            SelectionChanged="SettingsTabs_SelectionChanged">
                     <TabItem Header="模型连接">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="20,16,20,20">
@@ -115,7 +130,16 @@
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="提供商名称" />
                                         <TextBox x:Name="ProviderNameBox" Style="{StaticResource FormField}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="API 协议" />
-                                        <ComboBox x:Name="ProtocolComboBox" Height="36" DisplayMemberPath="Name" Background="White" Style="{StaticResource ComboField}" />
+                                        <ComboBox x:Name="ProtocolComboBox"
+                                                  Height="36"
+                                                  Background="White"
+                                                  Style="{StaticResource ComboField}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="接口地址" />
                                         <TextBox x:Name="BaseUriBox" Style="{StaticResource FormField}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="API Key" />
@@ -167,6 +191,210 @@
                                 </Border>
                             </StackPanel>
                         </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="功能选项">
+                        <Grid Margin="20,16,20,20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="238" />
+                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="选项列表" />
+                                <ListBox x:Name="FunctionEditorList"
+                                         Grid.Row="1"
+                                         Margin="0,10,0,0"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         SelectionChanged="FunctionEditorList_SelectionChanged">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Padding" Value="10,9" />
+                                            <Setter Property="Margin" Value="0,2" />
+                                            <Setter Property="Focusable" Value="False" />
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="ListBoxItem">
+                                                        <Border x:Name="FunctionRow"
+                                                                Padding="{TemplateBinding Padding}"
+                                                                Background="Transparent"
+                                                                BorderBrush="Transparent"
+                                                                BorderThickness="3,0,0,0"
+                                                                CornerRadius="4">
+                                                            <ContentPresenter />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="FunctionRow" Property="Background" Value="#F4F6F9" />
+                                                            </Trigger>
+                                                            <Trigger Property="IsSelected" Value="True">
+                                                                <Setter TargetName="FunctionRow" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                                                <Setter TargetName="FunctionRow" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="30" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Width="24"
+                                                        Height="24"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Center"
+                                                        Background="White"
+                                                        CornerRadius="4">
+                                                    <TextBlock HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontFamily="Segoe MDL2 Assets"
+                                                               FontSize="13"
+                                                               Foreground="{StaticResource AccentBrush}"
+                                                               Text="{Binding Glyph}" />
+                                                </Border>
+                                                <TextBlock Grid.Column="1"
+                                                           Margin="8,0,0,0"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource InkBrush}"
+                                                           Text="{Binding Name}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                                    <Button x:Name="AddFunctionButton"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Padding="12,8"
+                                            Content="新增选项"
+                                            Click="AddFunctionButton_Click" />
+                                    <Grid Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="MoveFunctionUpButton"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="6,8"
+                                                Content="上移"
+                                                Click="MoveFunctionUpButton_Click" />
+                                        <Button x:Name="MoveFunctionDownButton"
+                                                Grid.Column="1"
+                                                Margin="6,0,0,0"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="6,8"
+                                                Content="下移"
+                                                Click="MoveFunctionDownButton_Click" />
+                                        <Button x:Name="DeleteFunctionButton"
+                                                Grid.Column="2"
+                                                Margin="6,0,0,0"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="6,8"
+                                                Content="删除"
+                                                Click="DeleteFunctionButton_Click" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+
+                            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <Border Style="{StaticResource CardBorder}" Padding="16,14">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource SectionTitle}" Text="显示与行为" />
+                                            <TextBlock Style="{StaticResource FieldLabel}" Text="选项名称" />
+                                            <TextBox x:Name="FunctionNameBox" Style="{StaticResource FormField}" />
+                                            <TextBlock Style="{StaticResource FieldLabel}" Text="图标" />
+                                            <ComboBox x:Name="FunctionGlyphComboBox"
+                                                      Height="38"
+                                                      Background="White"
+                                                      Style="{StaticResource ComboField}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Width="20"
+                                                                       VerticalAlignment="Center"
+                                                                       FontFamily="Segoe MDL2 Assets"
+                                                                       Foreground="{StaticResource AccentBrush}"
+                                                                       Text="{Binding Glyph}" />
+                                                            <TextBlock Margin="7,0,0,0"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="{Binding Name}" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <TextBlock Style="{StaticResource FieldLabel}" Text="执行方式" />
+                                            <ComboBox x:Name="FunctionModeComboBox"
+                                                      Height="38"
+                                                      Background="White"
+                                                      Style="{StaticResource ComboField}">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding Name}" />
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <TextBlock Margin="0,8,0,0"
+                                                       FontSize="11.5"
+                                                       Foreground="{StaticResource MutedBrush}"
+                                                       Text="联网与思考由执行方式决定，不会在其他选项中启用。" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0" Padding="16,14">
+                                        <StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Style="{StaticResource SectionTitle}" Text="系统提示词" />
+                                                    <TextBlock Margin="0,4,0,0"
+                                                               FontSize="11.5"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               Text="定义此选项的角色、回答风格和输出要求。" />
+                                                </StackPanel>
+                                                <Button x:Name="ResetFunctionPromptButton"
+                                                        Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        Style="{StaticResource SecondaryButton}"
+                                                        Padding="10,6"
+                                                        Content="恢复默认"
+                                                        Click="ResetFunctionPromptButton_Click" />
+                                            </Grid>
+                                            <TextBox x:Name="FunctionPromptBox"
+                                                     Height="210"
+                                                     Margin="0,12,0,0"
+                                                     Padding="11,9"
+                                                     AcceptsReturn="True"
+                                                     TextWrapping="Wrap"
+                                                     VerticalContentAlignment="Top"
+                                                     VerticalScrollBarVisibility="Auto"
+                                                     FontSize="13"
+                                                     Style="{StaticResource FormField}" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Grid>
                     </TabItem>
                     <TabItem Header="窗口偏好">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">

@@ -15,13 +15,32 @@ public enum ApiProtocol
     Responses
 }
 
-public sealed record FunctionOption(
-    WorkflowMode Mode,
-    string Name,
-    string Description,
-    string Glyph,
-    double IconOffsetX = 0,
-    double IconOffsetY = 0);
+public sealed class FunctionOption
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public WorkflowMode Mode { get; set; } = WorkflowMode.Answer;
+    public string Name { get; set; } = "回答此问题";
+    public string Description { get; set; } = "直接、准确地解答当前问题";
+    public string Glyph { get; set; } = "\uE8BD";
+    public string SystemPrompt { get; set; } = string.Empty;
+    public double IconOffsetX { get; set; }
+    public double IconOffsetY { get; set; }
+
+    public FunctionOption Clone()
+    {
+        return new FunctionOption
+        {
+            Id = Id,
+            Mode = Mode,
+            Name = Name,
+            Description = Description,
+            Glyph = Glyph,
+            SystemPrompt = SystemPrompt,
+            IconOffsetX = IconOffsetX,
+            IconOffsetY = IconOffsetY
+        };
+    }
+}
 
 public sealed record ConversationTurn(string Role, string Content);
 
@@ -64,6 +83,7 @@ public sealed class ProviderConfig
 public sealed class AppConfig
 {
     public List<ProviderConfig> Providers { get; set; } = [];
+    public List<FunctionOption> Functions { get; set; } = [];
     public string SelectedProviderId { get; set; } = string.Empty;
     public string TavilyApiKeyProtected { get; set; } = string.Empty;
     public bool KeepWindowOnTop { get; set; } = true;
@@ -81,6 +101,7 @@ public sealed class HistoryEntry
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
+    public string FunctionId { get; set; } = string.Empty;
     public WorkflowMode Mode { get; set; }
     public string ModeName { get; set; } = string.Empty;
     public string ProviderName { get; set; } = string.Empty;

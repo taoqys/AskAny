@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using AskAny.Models;
@@ -17,8 +18,11 @@ public partial class SettingsWindow : Window
     private readonly AiService _aiService;
     private readonly AppConfig _config;
     private readonly List<ProviderConfig> _providers;
+    private readonly List<FunctionOption> _functions;
     private ProviderConfig? _selectedProvider;
+    private FunctionOption? _selectedFunction;
     private bool _isLoadingProvider;
+    private bool _isLoadingFunction;
 
     public SettingsWindow(
         ConfigService configService,
@@ -33,6 +37,9 @@ public partial class SettingsWindow : Window
         _providers = config.Providers.Count == 0
             ? ProviderCatalog.CreateDefaultProviders()
             : config.Providers.Select(provider => provider.Clone()).ToList();
+        _functions = config.Functions.Count == 0
+            ? FunctionCatalog.CreateDefaultFunctions()
+            : config.Functions.Select(function => function.Clone()).ToList();
 
         PresetComboBox.ItemsSource = new[]
         {
@@ -50,6 +57,29 @@ public partial class SettingsWindow : Window
         };
 
         ReasoningEffortComboBox.ItemsSource = new[] { "low", "medium", "high", "max" };
+        FunctionModeComboBox.ItemsSource =
+        new[]
+        {
+            new FunctionModeOption("标准回答", WorkflowMode.Answer),
+            new FunctionModeOption("解释说明", WorkflowMode.Explain),
+            new FunctionModeOption("联网解释", WorkflowMode.ExplainOnline),
+            new FunctionModeOption("新闻追踪", WorkflowMode.TrackNews),
+            new FunctionModeOption("深度思考", WorkflowMode.Think)
+        };
+        FunctionGlyphComboBox.ItemsSource =
+        new[]
+        {
+            new FunctionGlyphOption("回答", "\uE8BD"),
+            new FunctionGlyphOption("解释", "\uE946"),
+            new FunctionGlyphOption("新闻", "\uE909"),
+            new FunctionGlyphOption("思考", "\uE735"),
+            new FunctionGlyphOption("搜索", "\uE774"),
+            new FunctionGlyphOption("写作", "\uE70F"),
+            new FunctionGlyphOption("代码", "\uE943"),
+            new FunctionGlyphOption("灵感", "\uEA80"),
+            new FunctionGlyphOption("文档", "\uE8A5"),
+            new FunctionGlyphOption("助手", "\uE99A")
+        };
 
         TavilyKeyBox.Password = ConfigService.Unprotect(config.TavilyApiKeyProtected);
         TopMostCheck.IsChecked = config.KeepWindowOnTop;
@@ -61,12 +91,16 @@ public partial class SettingsWindow : Window
         ProviderList.SelectedItem = _providers.FirstOrDefault(
                                         provider => provider.Id == config.SelectedProviderId)
                                     ?? _providers.FirstOrDefault();
+        _selectedFunction = _functions.FirstOrDefault();
+        FunctionEditorList.ItemsSource = _functions;
+        FunctionEditorList.SelectedItem = _selectedFunction;
 
         Loaded += (_, _) =>
         {
             SaveCurrentProvider();
             _selectedProvider = ProviderList.SelectedItem as ProviderConfig;
             LoadProviderToForm(_selectedProvider);
+            LoadFunctionToForm(_selectedFunction);
             ProviderNameBox.Focus();
         };
     }
@@ -109,7 +143,13 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        if (!TrySaveCurrentFunction())
+        {
+            return;
+        }
+
         _config.Providers = _providers.Select(provider => provider.Clone()).ToList();
+        _config.Functions = _functions.Select(function => function.Clone()).ToList();
         _config.SelectedProviderId = _selectedProvider!.Id;
         _config.TavilyApiKeyProtected = ConfigService.Protect(TavilyKeyBox.Password);
         _config.KeepWindowOnTop = TopMostCheck.IsChecked == true;
@@ -312,6 +352,224 @@ public partial class SettingsWindow : Window
         return true;
     }
 
+    private void FunctionEditorList_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_isLoadingFunction ||
+            FunctionEditorList.SelectedItem is not FunctionOption function ||
+            ReferenceEquals(function, _selectedFunction))
+        {
+            return;
+        }
+
+        SaveCurrentFunction(refreshList: false);
+        _selectedFunction = function;
+        LoadFunctionToForm(function);
+    }
+
+    private void AddFunctionButton_Click(object sender, RoutedEventArgs e)
+    {
+        SaveCurrentFunction();
+        var function = FunctionCatalog.CreateCustom();
+        _functions.Add(function);
+        _selectedFunction = function;
+        RefreshFunctionEditorList();
+        LoadFunctionToForm(function);
+        FunctionNameBox.Focus();
+        FunctionNameBox.SelectAll();
+    }
+
+    private void DeleteFunctionButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedFunction is null)
+        {
+            return;
+        }
+
+        if (_functions.Count <= 1)
+        {
+            SettingsStatusText.Text = "至少需要保留一个功能选项";
+            return;
+        }
+
+        var result = MessageBox.Show(
+            this,
+            $"确定删除“{_selectedFunction.Name}”吗？",
+            "AskAny",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var index = _functions.IndexOf(_selectedFunction);
+        _functions.Remove(_selectedFunction);
+        _selectedFunction = _functions[Math.Clamp(index, 0, _functions.Count - 1)];
+        RefreshFunctionEditorList();
+        LoadFunctionToForm(_selectedFunction);
+    }
+
+    private void MoveFunctionUpButton_Click(object sender, RoutedEventArgs e)
+    {
+        MoveSelectedFunction(-1);
+    }
+
+    private void MoveFunctionDownButton_Click(object sender, RoutedEventArgs e)
+    {
+        MoveSelectedFunction(1);
+    }
+
+    private void MoveSelectedFunction(int offset)
+    {
+        if (_selectedFunction is null)
+        {
+            return;
+        }
+
+        SaveCurrentFunction();
+        var index = _functions.IndexOf(_selectedFunction);
+        var targetIndex = index + offset;
+        if (index < 0 || targetIndex < 0 || targetIndex >= _functions.Count)
+        {
+            return;
+        }
+
+        (_functions[index], _functions[targetIndex]) = (_functions[targetIndex], _functions[index]);
+        RefreshFunctionEditorList();
+        FunctionEditorList.ScrollIntoView(_selectedFunction);
+        UpdateFunctionOrderButtons();
+    }
+
+    private void ResetFunctionPromptButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (FunctionModeComboBox.SelectedItem is not FunctionModeOption mode)
+        {
+            return;
+        }
+
+        FunctionPromptBox.Text = FunctionCatalog.GetDefaultSystemPrompt(mode.Mode);
+    }
+
+    private void LoadFunctionToForm(FunctionOption? function)
+    {
+        _isLoadingFunction = true;
+        try
+        {
+            if (function is null)
+            {
+                return;
+            }
+
+            FunctionNameBox.Text = function.Name;
+            FunctionPromptBox.Text = function.SystemPrompt;
+            FunctionModeComboBox.SelectedItem =
+                ((IEnumerable<FunctionModeOption>)FunctionModeComboBox.ItemsSource)
+                .FirstOrDefault(option => option.Mode == function.Mode);
+            FunctionGlyphComboBox.SelectedItem =
+                ((IEnumerable<FunctionGlyphOption>)FunctionGlyphComboBox.ItemsSource)
+                .FirstOrDefault(option => option.Glyph == function.Glyph)
+                ?? FunctionGlyphComboBox.Items[0];
+        }
+        finally
+        {
+            _isLoadingFunction = false;
+            UpdateFunctionOrderButtons();
+        }
+    }
+
+    private void SaveCurrentFunction(bool refreshList = true)
+    {
+        if (_selectedFunction is null || _isLoadingFunction)
+        {
+            return;
+        }
+
+        var mode = (FunctionModeComboBox.SelectedItem as FunctionModeOption)?.Mode
+                   ?? _selectedFunction.Mode;
+        var glyph = (FunctionGlyphComboBox.SelectedItem as FunctionGlyphOption)?.Glyph
+                    ?? _selectedFunction.Glyph;
+
+        _selectedFunction.Mode = mode;
+        _selectedFunction.Name = string.IsNullOrWhiteSpace(FunctionNameBox.Text)
+            ? FunctionCatalog.GetModeName(mode)
+            : FunctionNameBox.Text.Trim();
+        _selectedFunction.Glyph = string.IsNullOrWhiteSpace(glyph)
+            ? "\uE8BD"
+            : glyph;
+        _selectedFunction.SystemPrompt = string.IsNullOrWhiteSpace(FunctionPromptBox.Text)
+            ? FunctionCatalog.GetDefaultSystemPrompt(mode)
+            : FunctionPromptBox.Text.Trim();
+        if (refreshList)
+        {
+            FunctionEditorList.Items.Refresh();
+        }
+    }
+
+    private bool TrySaveCurrentFunction()
+    {
+        SaveCurrentFunction();
+        if (_selectedFunction is null)
+        {
+            SettingsStatusText.Text = "请先新增或选择一个功能选项";
+            return false;
+        }
+
+        return true;
+    }
+
+    private void RefreshFunctionEditorList()
+    {
+        _isLoadingFunction = true;
+        try
+        {
+            FunctionEditorList.ItemsSource = null;
+            FunctionEditorList.ItemsSource = _functions;
+            FunctionEditorList.SelectedItem = _selectedFunction;
+        }
+        finally
+        {
+            _isLoadingFunction = false;
+        }
+
+        UpdateFunctionOrderButtons();
+    }
+
+    private void UpdateFunctionOrderButtons()
+    {
+        var index = _selectedFunction is null ? -1 : _functions.IndexOf(_selectedFunction);
+        MoveFunctionUpButton.IsEnabled = index > 0;
+        MoveFunctionDownButton.IsEnabled = index >= 0 && index < _functions.Count - 1;
+        DeleteFunctionButton.IsEnabled = _functions.Count > 1;
+    }
+
+    private void SettingsTabs_SelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (ProviderSidebarColumn is null ||
+            ProviderSidebar is null ||
+            ProviderDividerColumn is null ||
+            ProviderDivider is null)
+        {
+            return;
+        }
+
+        var showProviderSidebar = SettingsTabs.SelectedIndex != 2;
+        var width = showProviderSidebar ? new GridLength(220) : new GridLength(0);
+        ProviderSidebarColumn.Width = width;
+        ProviderDividerColumn.Width = showProviderSidebar
+            ? new GridLength(1)
+            : new GridLength(0);
+        ProviderSidebar.Visibility = showProviderSidebar
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ProviderDivider.Visibility = showProviderSidebar
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
     private static List<string> ParseModels(string input)
     {
         return input
@@ -364,4 +622,8 @@ public partial class SettingsWindow : Window
     private sealed record PresetOption(string Name, string Id);
 
     private sealed record ProtocolOption(string Name, ApiProtocol Protocol);
+
+    private sealed record FunctionModeOption(string Name, WorkflowMode Mode);
+
+    private sealed record FunctionGlyphOption(string Name, string Glyph);
 }

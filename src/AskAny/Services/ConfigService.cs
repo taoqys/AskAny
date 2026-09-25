@@ -52,6 +52,8 @@ public sealed class ConfigService
 
     private static AppConfig Normalize(AppConfig config)
     {
+        config.Functions = NormalizeFunctions(config.Functions);
+
         if (config.Providers.Count == 0)
         {
             var isDeepSeek = config.OpenAiBaseUri.Contains(
@@ -103,6 +105,41 @@ public sealed class ConfigService
             provider => provider.Id.Equals(config.SelectedProviderId, StringComparison.OrdinalIgnoreCase));
         config.SelectedProviderId = selected?.Id ?? config.Providers[0].Id;
         return config;
+    }
+
+    private static List<FunctionOption> NormalizeFunctions(List<FunctionOption>? configuredFunctions)
+    {
+        if (configuredFunctions is null || configuredFunctions.Count == 0)
+        {
+            return FunctionCatalog.CreateDefaultFunctions();
+        }
+
+        var usedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var functions = new List<FunctionOption>();
+
+        foreach (var configuredFunction in configuredFunctions)
+        {
+            var function = configuredFunction?.Clone() ?? FunctionCatalog.CreateCustom();
+            if (string.IsNullOrWhiteSpace(function.Id) || !usedIds.Add(function.Id))
+            {
+                function.Id = Guid.NewGuid().ToString("N");
+                usedIds.Add(function.Id);
+            }
+
+            function.Name = string.IsNullOrWhiteSpace(function.Name)
+                ? FunctionCatalog.GetModeName(function.Mode)
+                : function.Name.Trim();
+            function.Description = function.Description?.Trim() ?? string.Empty;
+            function.Glyph = string.IsNullOrWhiteSpace(function.Glyph)
+                ? "\uE8BD"
+                : function.Glyph;
+            function.SystemPrompt = string.IsNullOrWhiteSpace(function.SystemPrompt)
+                ? FunctionCatalog.GetDefaultSystemPrompt(function.Mode)
+                : function.SystemPrompt.Trim();
+            functions.Add(function);
+        }
+
+        return functions;
     }
 
     public static string Protect(string value)
