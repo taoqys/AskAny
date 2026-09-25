@@ -598,6 +598,10 @@ public partial class MainWindow : Window
 
     private void FunctionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (FunctionList.SelectedItem is FunctionOption option)
+        {
+            StatusText.Text = $"已选择：{option.Name}，Enter 执行";
+        }
     }
 
     private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -776,10 +780,10 @@ public partial class MainWindow : Window
         PromptInfoText.Text = string.Empty;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(78);
+        PromptRowDefinition.Height = new GridLength(76);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
-        StatusText.Text = "← 按 ESC 关闭";
+        StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
         FocusPromptEditor();
     }
 
@@ -794,10 +798,10 @@ public partial class MainWindow : Window
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(78);
+        PromptRowDefinition.Height = new GridLength(76);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
-        StatusText.Text = "← 按 ESC 关闭";
+        StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
     }
 
     private void SetResponsePromptDisplay(string prompt)
@@ -821,7 +825,7 @@ public partial class MainWindow : Window
         PromptPlaceholder.Text = "继续提问…";
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(78);
+        PromptRowDefinition.Height = new GridLength(76);
         ResponseMetaText.Text = "输入追问后按 Enter 发送 · ← 返回";
         FocusPromptEditor();
     }
@@ -882,6 +886,11 @@ public partial class MainWindow : Window
         Topmost = _config.KeepWindowOnTop;
         UpdatePinButton();
         await _configService.SaveAsync(_config);
+    }
+
+    private void ExitButton_Click(object sender, RoutedEventArgs e)
+    {
+        RequestExit();
     }
 
     private void UpdatePinButton()

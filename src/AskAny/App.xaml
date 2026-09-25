@@ -3,12 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
-        <SolidColorBrush x:Key="AccentBrush" Color="#3E5FAE" />
-        <SolidColorBrush x:Key="AccentSoftBrush" Color="#EDF2FB" />
-        <SolidColorBrush x:Key="InkBrush" Color="#1F2328" />
-        <SolidColorBrush x:Key="MutedBrush" Color="#6B7280" />
-        <SolidColorBrush x:Key="LineBrush" Color="#D9DEE7" />
-        <SolidColorBrush x:Key="SurfaceBrush" Color="#F1F3F7" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#5650D6" />
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#EEEEFB" />
+        <SolidColorBrush x:Key="InkBrush" Color="#202124" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#74757A" />
+        <SolidColorBrush x:Key="LineBrush" Color="#E5E5E8" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#F4F4F6" />
 
         <Style x:Key="IconButton" TargetType="Button">
             <Setter Property="Width" Value="38" />
@@ -22,7 +22,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Root"
                                 Background="{TemplateBinding Background}"
-                                CornerRadius="4">
+                                CornerRadius="8">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center" />
                         </Border>
