@@ -28,11 +28,15 @@ public partial class MainWindow : Window
 
     private AppConfig _config = new();
     private ProviderConfig? _currentProvider;
+    private FunctionOption? _activeFunction;
+    private List<ModelChoice> _modelChoices = [];
+    private readonly List<ConversationTurn> _conversation = [];
     private bool _isRunning;
     private bool _allowClose;
     private bool _suppressDeactivateHide;
-    private bool _isLoadingProviders;
+    private bool _isRefreshingModels;
     private bool _isFocusingPrompt;
+    private bool _isFollowUpInput;
     private string _lastAnswer = string.Empty;
 
     public MainWindow(
@@ -63,15 +67,12 @@ public partial class MainWindow : Window
     {
         _config = await _configService.LoadAsync();
 
-        _isLoadingProviders = true;
-        ProviderComboBox.ItemsSource = null;
-        ProviderComboBox.ItemsSource = _config.Providers;
-        _currentProvider = _config.Providers.FirstOrDefault(
-                               provider => provider.Id == _config.SelectedProviderId)
-                           ?? _config.Providers.FirstOrDefault();
-        ProviderComboBox.SelectedItem = _currentProvider;
-        RefreshModelComboBox();
-        _isLoadingProviders = false;
+        if (StartupService.IsEnabled() != _config.StartWithWindows)
+        {
+            StartupService.SetEnabled(_config.StartWithWindows);
+        }
+
+        RefreshModelChoices();
 
         Topmost = _config.KeepWindowOnTop;
         UpdatePinButton();
@@ -131,6 +132,32 @@ public partial class MainWindow : Window
             Hide();
             e.Handled = true;
             return;
+        }
+
+        if (ResponsePanel.Visibility == Visibility.Visible)
+        {
+            if (e.Key == Key.Left)
+            {
+                ShowWorkflowList();
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Enter && !_isRunning)
+            {
+                if (_isFollowUpInput)
+                {
+                    CommitModelSelection();
+                    _ = ExecuteFollowUpAsync();
+                }
+                else
+                {
+                    BeginFollowUpInput();
+                }
+
+                e.Handled = true;
+                return;
+            }
         }
 
         if (e.Key == Key.Up)
@@ -388,12 +415,46 @@ public partial class MainWindow : Window
             return;
         }
 
+        _conversation.Clear();
+        _activeFunction = option;
+        await ExecuteTurnAsync(prompt, option, _currentProvider);
+    }
+
+    private async Task ExecuteFollowUpAsync()
+    {
+        if (_isRunning)
+        {
+            return;
+        }
+
+        var prompt = PromptBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            PromptBox.Focus();
+            return;
+        }
+
+        if (_activeFunction is null || _currentProvider is null)
+        {
+            StatusText.Text = "当前对话已结束，请重新选择功能";
+            return;
+        }
+
+        _isFollowUpInput = false;
+        await ExecuteTurnAsync(prompt, _activeFunction, _currentProvider);
+    }
+
+    private async Task ExecuteTurnAsync(
+        string prompt,
+        FunctionOption option,
+        ProviderConfig provider)
+    {
         _isRunning = true;
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
         SetResponsePromptDisplay(prompt);
-        ResponseModeText.Text = $"{option.Name} · {_currentProvider.Name} / {_currentProvider.SelectedModel}";
+        ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
             ? "正在检索网络资料…"
@@ -420,23 +481,27 @@ public partial class MainWindow : Window
             var answer = await _aiService.ExecuteAsync(
                 option.Mode,
                 prompt,
-                _currentProvider,
-                ConfigService.Unprotect(_currentProvider.ApiKeyProtected),
-                search);
+                provider,
+                ConfigService.Unprotect(provider.ApiKeyProtected),
+                search,
+                _conversation.ToArray());
 
             _lastAnswer = answer;
             SetOutputMarkdown(answer);
+            _conversation.Add(new ConversationTurn("user", prompt));
+            _conversation.Add(new ConversationTurn("assistant", answer));
             stopwatch.Stop();
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
-            ResponseMetaText.Text = $"{stopwatch.Elapsed.TotalSeconds:F1} 秒{sourceText}";
+            ResponseMetaText.Text =
+                $"{stopwatch.Elapsed.TotalSeconds:F1} 秒{sourceText} · Enter 追问 · ← 返回";
             StatusText.Text = "执行完成";
 
             await _historyService.AddAsync(new HistoryEntry
             {
                 Mode = option.Mode,
                 ModeName = option.Name,
-                ProviderName = _currentProvider.Name,
-                Model = _currentProvider.SelectedModel,
+                ProviderName = provider.Name,
+                Model = provider.SelectedModel,
                 Prompt = prompt,
                 Response = answer,
                 SourceCount = search?.Sources.Count ?? 0
@@ -481,32 +546,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ProviderComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_isLoadingProviders || ProviderComboBox.SelectedItem is not ProviderConfig provider)
-        {
-            return;
-        }
-
-        _currentProvider = provider;
-        _config.SelectedProviderId = provider.Id;
-        RefreshModelComboBox();
-        _ = _configService.SaveAsync(_config);
-    }
-
     private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_isLoadingProviders || _currentProvider is null)
+        if (_isRefreshingModels || ModelComboBox.SelectedItem is not ModelChoice choice)
         {
             return;
         }
 
-        if (ModelComboBox.SelectedItem is string selectedModel &&
-            !string.IsNullOrWhiteSpace(selectedModel))
-        {
-            _currentProvider.SelectedModel = selectedModel;
-            _ = _configService.SaveAsync(_config);
-        }
+        ApplyModelChoice(choice);
     }
 
     private void ModelComboBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
@@ -516,40 +563,77 @@ public partial class MainWindow : Window
 
     private void CommitModelSelection()
     {
-        if (_currentProvider is null)
+        var typedValue = ModelComboBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(typedValue))
         {
             return;
         }
 
-        var model = ModelComboBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(model))
+        var selectedChoice = _modelChoices.FirstOrDefault(choice =>
+            choice.DisplayName.Equals(typedValue, StringComparison.OrdinalIgnoreCase) ||
+            choice.Model.Equals(typedValue, StringComparison.OrdinalIgnoreCase));
+        if (selectedChoice is not null)
+        {
+            ModelComboBox.SelectedItem = selectedChoice;
+            ApplyModelChoice(selectedChoice);
+            return;
+        }
+
+        var provider = _currentProvider ?? _config.Providers.FirstOrDefault();
+        if (provider is null)
         {
             return;
         }
 
-        if (!_currentProvider.Models.Contains(model, StringComparer.OrdinalIgnoreCase))
+        if (!provider.Models.Contains(typedValue, StringComparer.OrdinalIgnoreCase))
         {
-            _currentProvider.Models.Add(model);
+            provider.Models.Add(typedValue);
         }
 
-        _currentProvider.SelectedModel = model;
+        _currentProvider = provider;
+        provider.SelectedModel = typedValue;
+        _config.SelectedProviderId = provider.Id;
+        RefreshModelChoices();
         _ = _configService.SaveAsync(_config);
     }
 
-    private void RefreshModelComboBox()
+    private void RefreshModelChoices()
     {
-        if (_currentProvider is null)
+        _isRefreshingModels = true;
+        try
         {
-            ModelComboBox.ItemsSource = null;
-            return;
-        }
+            _modelChoices = _config.Providers
+                .SelectMany(provider => provider.Models
+                    .Where(model => !string.IsNullOrWhiteSpace(model))
+                    .Select(model => new ModelChoice(provider, model)))
+                .ToList();
 
-        var wasLoading = _isLoadingProviders;
-        _isLoadingProviders = true;
-        ModelComboBox.ItemsSource = null;
-        ModelComboBox.ItemsSource = _currentProvider.Models;
-        ModelComboBox.Text = _currentProvider.SelectedModel;
-        _isLoadingProviders = wasLoading;
+            ModelComboBox.ItemsSource = null;
+            ModelComboBox.ItemsSource = _modelChoices;
+
+            var preferred = _modelChoices.FirstOrDefault(choice =>
+                                choice.Provider.Id == _config.SelectedProviderId &&
+                                choice.Model.Equals(
+                                    choice.Provider.SelectedModel,
+                                    StringComparison.OrdinalIgnoreCase))
+                            ?? _modelChoices.FirstOrDefault();
+
+            _currentProvider = preferred?.Provider ?? _config.Providers.FirstOrDefault();
+            ModelComboBox.SelectedItem = preferred;
+            ModelComboBox.Text = preferred?.DisplayName ?? string.Empty;
+        }
+        finally
+        {
+            _isRefreshingModels = false;
+        }
+    }
+
+    private void ApplyModelChoice(ModelChoice choice)
+    {
+        _currentProvider = choice.Provider;
+        choice.Provider.SelectedModel = choice.Model;
+        _config.SelectedProviderId = choice.Provider.Id;
+        _ = _configService.SaveAsync(_config);
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -625,10 +709,14 @@ public partial class MainWindow : Window
 
     private void ShowWorkflowList()
     {
+        _conversation.Clear();
+        _activeFunction = null;
+        _isFollowUpInput = false;
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptInfoText.Text = string.Empty;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(120);
+        PromptPlaceholder.Text = "输入问题…";
+        PromptRowDefinition.Height = new GridLength(96);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
@@ -638,11 +726,15 @@ public partial class MainWindow : Window
     private void ResetForNewRequest()
     {
         _lastAnswer = string.Empty;
+        _conversation.Clear();
+        _activeFunction = null;
+        _isFollowUpInput = false;
         PromptBox.Clear();
         PromptInfoText.Text = string.Empty;
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(120);
+        PromptPlaceholder.Text = "输入问题…";
+        PromptRowDefinition.Height = new GridLength(96);
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
@@ -650,10 +742,28 @@ public partial class MainWindow : Window
 
     private void SetResponsePromptDisplay(string prompt)
     {
+        _isFollowUpInput = false;
         PromptInfoText.Text = prompt;
         PromptInfoText.Visibility = Visibility.Visible;
         PromptEditorBorder.Visibility = Visibility.Collapsed;
-        PromptRowDefinition.Height = new GridLength(58);
+        PromptRowDefinition.Height = new GridLength(52);
+    }
+
+    private void BeginFollowUpInput()
+    {
+        if (_isRunning || ResponsePanel.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        _isFollowUpInput = true;
+        PromptBox.Clear();
+        PromptPlaceholder.Text = "继续提问…";
+        PromptInfoText.Visibility = Visibility.Collapsed;
+        PromptEditorBorder.Visibility = Visibility.Visible;
+        PromptRowDefinition.Height = new GridLength(96);
+        ResponseMetaText.Text = "输入追问后按 Enter 发送 · ← 返回";
+        FocusPromptEditor();
     }
 
     private void CopyButton_Click(object sender, RoutedEventArgs e)

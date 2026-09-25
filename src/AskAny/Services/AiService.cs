@@ -18,6 +18,7 @@ public sealed class AiService
         ProviderConfig provider,
         string apiKey,
         SearchPacket? search,
+        IReadOnlyList<ConversationTurn>? conversation = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(prompt))
@@ -32,7 +33,12 @@ public sealed class AiService
 
         var systemPrompt = BuildSystemPrompt(mode, search);
         var endpoint = BuildEndpoint(provider.BaseUri, provider.Protocol);
-        var requestBody = BuildRequestBody(mode, prompt, provider, systemPrompt);
+        var requestBody = BuildRequestBody(
+            mode,
+            prompt,
+            provider,
+            systemPrompt,
+            conversation);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
         if (!string.IsNullOrWhiteSpace(apiKey))
@@ -71,6 +77,7 @@ public sealed class AiService
             provider,
             apiKey,
             null,
+            null,
             cancellationToken);
     }
 
@@ -78,17 +85,38 @@ public sealed class AiService
         WorkflowMode mode,
         string prompt,
         ProviderConfig provider,
-        string systemPrompt)
+        string systemPrompt,
+        IReadOnlyList<ConversationTurn>? conversation)
     {
         var isThinking = mode == WorkflowMode.Think;
 
         if (provider.Protocol == ApiProtocol.Responses)
         {
+            var input = new List<object>();
+            foreach (var turn in conversation ?? [])
+            {
+                if (turn.Role is "user" or "assistant" &&
+                    !string.IsNullOrWhiteSpace(turn.Content))
+                {
+                    input.Add(new Dictionary<string, object?>
+                    {
+                        ["role"] = turn.Role,
+                        ["content"] = turn.Content
+                    });
+                }
+            }
+
+            input.Add(new Dictionary<string, object?>
+            {
+                ["role"] = "user",
+                ["content"] = prompt
+            });
+
             var body = new Dictionary<string, object?>
             {
                 ["model"] = provider.SelectedModel.Trim(),
                 ["instructions"] = systemPrompt,
-                ["input"] = prompt
+                ["input"] = input
             };
 
             if (!isThinking)
@@ -113,14 +141,25 @@ public sealed class AiService
             return body;
         }
 
+        var messages = new List<object>
+        {
+            new ChatMessage("system", systemPrompt)
+        };
+        foreach (var turn in conversation ?? [])
+        {
+            if (turn.Role is "user" or "assistant" &&
+                !string.IsNullOrWhiteSpace(turn.Content))
+            {
+                messages.Add(new ChatMessage(turn.Role, turn.Content));
+            }
+        }
+
+        messages.Add(new ChatMessage("user", prompt));
+
         var chatBody = new Dictionary<string, object?>
         {
             ["model"] = provider.SelectedModel.Trim(),
-            ["messages"] = new[]
-            {
-                new ChatMessage("system", systemPrompt),
-                new ChatMessage("user", prompt)
-            }
+            ["messages"] = messages
         };
 
         if (!isThinking)

@@ -220,6 +220,11 @@
                                   FontSize="13"
                                   Foreground="{StaticResource InkBrush}"
                                   Content="窗口始终置顶" />
+                        <CheckBox x:Name="StartWithWindowsCheck"
+                                  Margin="0,9,0,0"
+                                  FontSize="13"
+                                  Foreground="{StaticResource InkBrush}"
+                                  Content="开机时自动启动 AskAny" />
                         <CheckBox x:Name="HideWhenDeactivatedCheck"
                                   Margin="0,9,0,0"
                                   FontSize="13"

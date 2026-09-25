@@ -23,6 +23,13 @@ public sealed record FunctionOption(
     double IconOffsetX = 0,
     double IconOffsetY = 0);
 
+public sealed record ConversationTurn(string Role, string Content);
+
+public sealed record ModelChoice(ProviderConfig Provider, string Model)
+{
+    public string DisplayName => $"{Provider.Name} · {Model}";
+}
+
 public sealed class ProviderConfig
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -60,6 +67,7 @@ public sealed class AppConfig
     public bool KeepWindowOnTop { get; set; } = true;
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
+    public bool StartWithWindows { get; set; }
 
     // Legacy fields are retained so existing installations migrate cleanly.
     public string OpenAiBaseUri { get; set; } = "https://api.openai.com/v1";

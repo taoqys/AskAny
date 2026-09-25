@@ -46,6 +46,7 @@ public partial class SettingsWindow : Window
 
         TavilyKeyBox.Password = ConfigService.Unprotect(config.TavilyApiKeyProtected);
         TopMostCheck.IsChecked = config.KeepWindowOnTop;
+        StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
         HideWhenDeactivatedCheck.IsChecked = config.HideWhenDeactivated;
         AutoFillSelectionCheck.IsChecked = config.AutoFillSelectedText;
 
@@ -107,6 +108,15 @@ public partial class SettingsWindow : Window
         _config.KeepWindowOnTop = TopMostCheck.IsChecked == true;
         _config.HideWhenDeactivated = HideWhenDeactivatedCheck.IsChecked == true;
         _config.AutoFillSelectedText = AutoFillSelectionCheck.IsChecked == true;
+
+        if (!StartupService.SetEnabled(StartWithWindowsCheck.IsChecked == true))
+        {
+            SettingsStatusText.Text = "无法修改开机启动项，请检查系统权限";
+            SaveButton.IsEnabled = true;
+            return;
+        }
+
+        _config.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
 
         SaveButton.IsEnabled = false;
         await _configService.SaveAsync(_config);
