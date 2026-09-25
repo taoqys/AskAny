@@ -23,7 +23,8 @@ public partial class App : Application
 
         var screenshotMode = e.Args.Length >= 2 ? e.Args[0] : string.Empty;
         var isScreenshot = screenshotMode.Equals("--screenshot", StringComparison.OrdinalIgnoreCase) ||
-                           screenshotMode.Equals("--screenshot-settings", StringComparison.OrdinalIgnoreCase);
+                           screenshotMode.Equals("--screenshot-settings", StringComparison.OrdinalIgnoreCase) ||
+                           screenshotMode.Equals("--screenshot-markdown", StringComparison.OrdinalIgnoreCase);
         var instanceName = e.Args
             .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
             ?.Split('=', 2)[1];
@@ -73,6 +74,47 @@ public partial class App : Application
 
             settings.UpdateLayout();
             SaveScreenshot(settings, e.Args[1]);
+            Shutdown();
+            return;
+        }
+
+        if (screenshotMode.Equals("--screenshot-markdown", StringComparison.OrdinalIgnoreCase))
+        {
+            var preview = new Window
+            {
+                Title = "Markdown Preview",
+                Width = 760,
+                Height = 620,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                Background = Brushes.White,
+                Content = new System.Windows.Controls.RichTextBox
+                {
+                    Document = MarkdownRenderer.Render(
+                        """
+                        ## 公式渲染
+
+                        行内公式：质能方程是 $E = mc^2$。
+
+                        独立公式：
+
+                        $$
+                        \int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+                        $$
+
+                        | 项目 | 公式 |
+                        | --- | --- |
+                        | 二次方程 | $x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}$ |
+                        """),
+                    IsReadOnly = true,
+                    IsDocumentEnabled = true,
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(24),
+                    VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto
+                }
+            };
+            preview.Show();
+            preview.UpdateLayout();
+            SaveScreenshot(preview, e.Args[1]);
             Shutdown();
             return;
         }
