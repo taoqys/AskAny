@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using AskAny.Models;
 using AskAny.Services;
@@ -57,6 +58,9 @@ public partial class HistoryWindow : Window
         object sender,
         System.Windows.Controls.TextChangedEventArgs e)
     {
+        SearchPlaceholder.Visibility = string.IsNullOrEmpty(SearchBox.Text)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         ApplyFilter();
     }
 
@@ -143,5 +147,38 @@ public partial class HistoryWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;
+    }
+
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            FindVisualParent<ButtonBase>((DependencyObject)e.OriginalSource) is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject? child)
+        where T : DependencyObject
+    {
+        while (child is not null)
+        {
+            if (child is T parent)
+            {
+                return parent;
+            }
+
+            child = System.Windows.Media.VisualTreeHelper.GetParent(child);
+        }
+
+        return null;
     }
 }

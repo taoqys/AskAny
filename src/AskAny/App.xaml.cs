@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using AskAny.Models;
 using AskAny.Native;
 using AskAny.Services;
 using Forms = System.Windows.Forms;
@@ -20,8 +21,9 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        var isScreenshot = e.Args.Length >= 2 &&
-                           e.Args[0].Equals("--screenshot", StringComparison.OrdinalIgnoreCase);
+        var screenshotMode = e.Args.Length >= 2 ? e.Args[0] : string.Empty;
+        var isScreenshot = screenshotMode.Equals("--screenshot", StringComparison.OrdinalIgnoreCase) ||
+                           screenshotMode.Equals("--screenshot-settings", StringComparison.OrdinalIgnoreCase);
         var instanceName = e.Args
             .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
             ?.Split('=', 2)[1];
@@ -51,6 +53,30 @@ public partial class App : Application
 
         var configService = new ConfigService();
         var historyService = new HistoryService();
+        if (screenshotMode.Equals("--screenshot-settings", StringComparison.OrdinalIgnoreCase))
+        {
+            var provider = ProviderCatalog.CreatePreset("openai-chat");
+            var previewConfig = new AppConfig
+            {
+                Providers = [provider],
+                SelectedProviderId = provider.Id
+            };
+            var settings = new SettingsWindow(configService, previewConfig, new AiService(_httpClient))
+            {
+                WindowStartupLocation = WindowStartupLocation.CenterScreen
+            };
+            settings.Show();
+            if (e.Args.Length >= 3 && int.TryParse(e.Args[2], out var tabIndex))
+            {
+                settings.PreviewTabIndex = tabIndex;
+            }
+
+            settings.UpdateLayout();
+            SaveScreenshot(settings, e.Args[1]);
+            Shutdown();
+            return;
+        }
+
         var mainWindow = new MainWindow(
             configService,
             new AiService(_httpClient),

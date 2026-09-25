@@ -13,171 +13,79 @@
         ShowInTaskbar="False"
         Topmost="True"
         WindowStartupLocation="CenterOwner">
-    <Border Margin="8"
-            Background="White"
-            BorderBrush="#CCD2DC"
-            BorderThickness="1"
-            CornerRadius="4">
+    <Border Margin="10" Background="White" BorderBrush="#DADAE0" BorderThickness="1" CornerRadius="8">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="24"
-                              ShadowDepth="3"
-                              Opacity="0.16"
-                              Color="#1F2937" />
+            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.16" Color="#202124" />
         </Border.Effect>
-
         <Grid>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="60" />
-                <RowDefinition Height="1" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="62" />
-            </Grid.RowDefinitions>
-
-            <Grid Grid.Row="0" Margin="18,0,10,0">
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource InkBrush}"
-                               Text="历史记录" />
-                    <TextBlock Margin="0,3,0,0"
-                               FontSize="11.5"
-                               Foreground="{StaticResource MutedBrush}"
-                               Text="最近 200 次 AskAny 请求" />
+            <Grid.RowDefinitions><RowDefinition Height="72" /><RowDefinition Height="1" /><RowDefinition Height="*" /><RowDefinition Height="66" /></Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="18,8,10,8" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Image Width="34" Height="34" HorizontalAlignment="Left" VerticalAlignment="Center" Source="Assets/AskAny-transparent.png" />
+                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <TextBlock FontSize="19" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="历史记录" />
                 </StackPanel>
-                <Button HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource IconButton}"
-                        ToolTip="关闭"
-                        Click="CloseButton_Click">
-                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                               FontSize="16"
-                               Text="&#xE711;" />
+                <Button Grid.Column="2" Style="{StaticResource IconButton}" ToolTip="关闭" Click="CloseButton_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="16" Text="&#xE711;" />
                 </Button>
             </Grid>
-
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="285" />
-                    <ColumnDefinition Width="1" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <Grid Grid.Column="0" Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <TextBox x:Name="SearchBox"
-                             Height="36"
-                             Padding="10,6"
-                             VerticalContentAlignment="Center"
-                             FontSize="13"
-                             Foreground="{StaticResource InkBrush}"
-                             Background="#FCFCFD"
-                             BorderBrush="{StaticResource LineBrush}"
-                             BorderThickness="1"
-                             TextChanged="SearchBox_TextChanged" />
-                    <ListBox x:Name="HistoryList"
-                             Grid.Row="1"
-                             Margin="0,9,0,0"
-                             BorderBrush="{StaticResource LineBrush}"
-                             BorderThickness="1"
-                             Background="#FCFCFD"
-                             SelectionChanged="HistoryList_SelectionChanged"
-                             MouseDoubleClick="HistoryList_MouseDoubleClick">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="285" /><ColumnDefinition Width="1" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                <Grid Grid.Column="0" Margin="16,16,14,14">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <Grid>
+                        <TextBox x:Name="SearchBox" Height="38" Padding="11,7" VerticalContentAlignment="Center" FontSize="13" Foreground="{StaticResource InkBrush}" Background="#FCFCFD" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" Style="{StaticResource FormField}" TextChanged="SearchBox_TextChanged" />
+                        <TextBlock x:Name="SearchPlaceholder" Margin="12,0,8,0" VerticalAlignment="Center" FontSize="13" Foreground="#8A9099" IsHitTestVisible="False" Text="搜索问题、回答或模型" />
+                    </Grid>
+                    <ListBox x:Name="HistoryList" Grid.Row="1" Margin="0,10,0,0" BorderThickness="0" Background="Transparent" SelectionChanged="HistoryList_SelectionChanged" MouseDoubleClick="HistoryList_MouseDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="10,9" /><Setter Property="Margin" Value="0,2" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="HistoryRow" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="6"><ContentPresenter /></Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HistoryRow" Property="Background" Value="#F7F7F9" /></Trigger>
+                                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="HistoryRow" Property="Background" Value="{StaticResource SurfaceBrush}" /></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="3,5">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <TextBlock FontSize="12.5"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="{Binding Prompt}"
-                                               TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Grid.Row="1"
-                                               Margin="0,3,0,0"
-                                               FontSize="10.5"
-                                               Foreground="{StaticResource MutedBrush}"
-                                               Text="{Binding DisplayMeta}" />
-                                </Grid>
+                                <StackPanel>
+                                    <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="{Binding Prompt}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Margin="0,3,0,0" FontSize="10.5" Foreground="{StaticResource MutedBrush}" Text="{Binding DisplayMeta}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
-
                 <Border Grid.Column="1" Background="{StaticResource LineBrush}" />
-
-                <Grid Grid.Column="2" Margin="14,12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="0,0,0,9">
-                        <TextBlock x:Name="DetailTitleText"
-                                   FontSize="15"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource InkBrush}"
-                                   Text="选择一条记录" />
-                        <TextBlock x:Name="DetailMetaText"
-                                   Margin="0,3,0,0"
-                                   FontSize="11"
-                                   Foreground="{StaticResource MutedBrush}" />
+                <Grid Grid.Column="2" Margin="18,16,18,14">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock x:Name="DetailTitleText" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="选择一条记录" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="DetailMetaText" Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <Border Grid.Row="1"
-                            Background="#FCFCFD"
-                            BorderBrush="{StaticResource LineBrush}"
-                            BorderThickness="1"
-                            CornerRadius="3">
-                        <RichTextBox x:Name="DetailRichText"
-                                     Margin="12"
-                                     Padding="0"
-                                     IsReadOnly="True"
-                                     IsDocumentEnabled="True"
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     VerticalScrollBarVisibility="Auto"
-                                     HorizontalScrollBarVisibility="Disabled" />
+                    <Border Grid.Row="1" Background="#FAFAFB" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="7">
+                        <RichTextBox x:Name="DetailRichText" Margin="14" Padding="0" IsReadOnly="True" IsDocumentEnabled="True" Background="Transparent" BorderThickness="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" />
                     </Border>
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="3" Margin="14,9">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="HistoryStatusText"
-                           VerticalAlignment="Center"
-                           FontSize="11.5"
-                           Foreground="{StaticResource MutedBrush}" />
-                <Button Grid.Column="1"
-                        Margin="0,0,8,0"
-                        Style="{StaticResource SecondaryButton}"
-                        Content="清空"
-                        Click="ClearButton_Click" />
-                <Button Grid.Column="2"
-                        Margin="0,0,8,0"
-                        Style="{StaticResource SecondaryButton}"
-                        Content="删除"
-                        Click="DeleteButton_Click" />
-                <Button Grid.Column="3"
-                        Margin="0,0,8,0"
-                        Style="{StaticResource SecondaryButton}"
-                        Content="复制"
-                        Click="CopyButton_Click" />
-                <Button Grid.Column="4"
-                        MinWidth="92"
-                        Style="{StaticResource PrimaryButton}"
-                        Content="再次使用"
-                        Click="ReuseButton_Click" />
+            <Grid Grid.Row="3" Margin="18,9">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="HistoryStatusText" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" />
+                <Button Grid.Column="1" Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Content="清空" Click="ClearButton_Click" />
+                <Button Grid.Column="2" Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Content="删除" Click="DeleteButton_Click" />
+                <Button Grid.Column="3" Margin="0,0,8,0" Style="{StaticResource SecondaryButton}" Content="复制" Click="CopyButton_Click" />
+                <Button Grid.Column="4" MinWidth="92" Style="{StaticResource PrimaryButton}" Content="再次使用" Click="ReuseButton_Click" />
             </Grid>
         </Grid>
     </Border>

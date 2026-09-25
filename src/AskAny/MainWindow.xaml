@@ -48,19 +48,12 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Border Width="34"
-                        Height="34"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Background="{StaticResource AccentSoftBrush}"
-                        CornerRadius="7">
-                    <Image Width="25"
-                           Height="25"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           SnapsToDevicePixels="True"
-                           Source="Assets/AskAny.ico" />
-                </Border>
+                <Image Width="38"
+                       Height="38"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       SnapsToDevicePixels="True"
+                       Source="Assets/AskAny-transparent.png" />
 
                 <Grid Grid.Column="1" Margin="8,0,4,0">
                     <Border x:Name="PromptEditorBorder"

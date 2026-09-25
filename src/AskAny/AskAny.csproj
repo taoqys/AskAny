@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\AskAny.ico" />
+    <Resource Include="Assets\AskAny-transparent.png" />
   </ItemGroup>
 
 </Project>

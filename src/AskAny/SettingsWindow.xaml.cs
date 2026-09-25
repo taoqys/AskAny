@@ -1,4 +1,6 @@
 using System.Windows;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using AskAny.Models;
 using AskAny.Services;
 
@@ -6,6 +8,11 @@ namespace AskAny;
 
 public partial class SettingsWindow : Window
 {
+    public int PreviewTabIndex
+    {
+        set => SettingsTabs.SelectedIndex = Math.Clamp(value, 0, SettingsTabs.Items.Count - 1);
+    }
+
     private readonly ConfigService _configService;
     private readonly AiService _aiService;
     private readonly AppConfig _config;
@@ -143,6 +150,14 @@ public partial class SettingsWindow : Window
         LoadProviderToForm(provider);
     }
 
+    private void ReasoningCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (ReasoningEffortComboBox is not null)
+        {
+            ReasoningEffortComboBox.IsEnabled = ReasoningCheck.IsChecked == true;
+        }
+    }
+
     private void AddProviderButton_Click(object sender, RoutedEventArgs e)
     {
         if (PresetComboBox.SelectedItem is not PresetOption preset)
@@ -221,6 +236,7 @@ public partial class SettingsWindow : Window
                 .FirstOrDefault(effort => effort.Equals(
                     provider.ReasoningEffort,
                     StringComparison.OrdinalIgnoreCase)) ?? "high";
+            ReasoningEffortComboBox.IsEnabled = provider.SupportsReasoningControl;
             SettingsStatusText.Text = string.Empty;
         }
         finally
@@ -310,6 +326,39 @@ public partial class SettingsWindow : Window
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;
+    }
+
+    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            FindVisualParent<ButtonBase>((DependencyObject)e.OriginalSource) is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject? child)
+        where T : DependencyObject
+    {
+        while (child is not null)
+        {
+            if (child is T parent)
+            {
+                return parent;
+            }
+
+            child = System.Windows.Media.VisualTreeHelper.GetParent(child);
+        }
+
+        return null;
     }
 
     private sealed record PresetOption(string Name, string Id);

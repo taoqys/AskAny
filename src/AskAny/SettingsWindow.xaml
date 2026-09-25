@@ -2,10 +2,10 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny 设置"
-        Width="850"
+        Width="860"
         Height="700"
-        MinWidth="780"
-        MinHeight="640"
+        MinWidth="760"
+        MinHeight="620"
         ResizeMode="CanResize"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -13,267 +13,133 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Topmost="True">
-    <Border Margin="8"
-            Background="White"
-            BorderBrush="#CCD2DC"
-            BorderThickness="1"
-            CornerRadius="4">
+    <Border Margin="10" Background="White" BorderBrush="#DADAE0" BorderThickness="1" CornerRadius="8">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="24"
-                              ShadowDepth="3"
-                              Opacity="0.16"
-                              Color="#1F2937" />
+            <DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.16" Color="#202124" />
         </Border.Effect>
-
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="62" />
+                <RowDefinition Height="72" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
-                <RowDefinition Height="70" />
+                <RowDefinition Height="66" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0" Margin="18,0,10,0">
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock FontSize="18"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource InkBrush}"
-                               Text="设置" />
-                    <TextBlock Margin="0,3,0,0"
-                               FontSize="11.5"
-                               Foreground="{StaticResource MutedBrush}"
-                               Text="多提供商、模型、推理与联网搜索配置" />
+            <Grid Grid.Row="0" Margin="18,8,10,8" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+        <Image Width="34" Height="34" HorizontalAlignment="Left" VerticalAlignment="Center" Source="Assets/AskAny-transparent.png" />
+                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <TextBlock FontSize="19" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="设置" />
                 </StackPanel>
-                <Button HorizontalAlignment="Right"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource IconButton}"
-                        ToolTip="关闭"
-                        Click="CloseButton_Click">
-                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                               FontSize="16"
-                               Text="&#xE711;" />
+                <Button Grid.Column="2" Style="{StaticResource IconButton}" ToolTip="关闭" Click="CloseButton_Click">
+                    <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="16" Text="&#xE711;" />
                 </Button>
             </Grid>
-
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="230" />
+                    <ColumnDefinition Width="236" />
                     <ColumnDefinition Width="1" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-
-                <Grid Grid.Column="0" Margin="14">
+                <Grid Grid.Column="0" Margin="16,18,14,16">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-
-                    <TextBlock Margin="4,0,0,8"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource MutedBrush}"
-                               Text="提供商" />
-
-                    <ListBox x:Name="ProviderList"
-                             Grid.Row="1"
-                             BorderBrush="{StaticResource LineBrush}"
-                             BorderThickness="1"
-                             Background="#FCFCFD"
-                             DisplayMemberPath="Name"
-                             SelectionChanged="ProviderList_SelectionChanged" />
-
-                    <StackPanel Grid.Row="2" Margin="0,10,0,0">
-                        <ComboBox x:Name="PresetComboBox"
-                                  Height="34"
-                                  DisplayMemberPath="Name"
-                                  Style="{StaticResource ComboField}" />
-                        <Grid Margin="0,7,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="AddProviderButton"
-                                    Style="{StaticResource SecondaryButton}"
-                                    Padding="12,8"
-                                    Content="添加预设"
-                                    Click="AddProviderButton_Click" />
-                            <Button x:Name="DeleteProviderButton"
-                                    Grid.Column="1"
-                                    Margin="7,0,0,0"
-                                    Style="{StaticResource SecondaryButton}"
-                                    Padding="12,8"
-                                    Content="删除"
-                                    Click="DeleteProviderButton_Click" />
+                    <TextBlock Margin="4,0,0,10" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="提供商" />
+                    <ListBox x:Name="ProviderList" Grid.Row="1" BorderThickness="0" Background="Transparent" DisplayMemberPath="Name" SelectionChanged="ProviderList_SelectionChanged">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="10,9" />
+                                <Setter Property="Margin" Value="0,2" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="ProviderRow" Padding="{TemplateBinding Padding}" Background="Transparent" CornerRadius="6"><ContentPresenter /></Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ProviderRow" Property="Background" Value="#F7F7F9" /></Trigger>
+                                                <Trigger Property="IsSelected" Value="True"><Setter TargetName="ProviderRow" Property="Background" Value="{StaticResource SurfaceBrush}" /></Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
+                    <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                        <ComboBox x:Name="PresetComboBox" Height="36" DisplayMemberPath="Name" Style="{StaticResource ComboField}" />
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Button x:Name="AddProviderButton" Style="{StaticResource SecondaryButton}" Padding="12,8" Content="添加" Click="AddProviderButton_Click" />
+                            <Button x:Name="DeleteProviderButton" Grid.Column="1" Margin="8,0,0,0" Style="{StaticResource SecondaryButton}" Padding="12,8" Content="删除" Click="DeleteProviderButton_Click" />
                         </Grid>
                     </StackPanel>
                 </Grid>
-
                 <Border Grid.Column="1" Background="{StaticResource LineBrush}" />
 
-                <ScrollViewer Grid.Column="2"
-                              VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="20,14,20,18">
-                        <TextBlock FontSize="13"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource InkBrush}"
-                                   Text="接口配置" />
-
-                        <TextBlock Margin="0,12,0,5"
-                                   FontSize="11.5"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   Text="提供商名称" />
-                        <TextBox x:Name="ProviderNameBox"
-                                 Style="{StaticResource FormField}" />
-
-                        <TextBlock Margin="0,12,0,5"
-                                   FontSize="11.5"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   Text="API 协议" />
-                        <ComboBox x:Name="ProtocolComboBox"
-                                  Height="36"
-                                  DisplayMemberPath="Name"
-                                  Style="{StaticResource ComboField}" />
-
-                        <TextBlock Margin="0,12,0,5"
-                                   FontSize="11.5"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   Text="接口地址（Base URL）" />
-                        <TextBox x:Name="BaseUriBox"
-                                 Style="{StaticResource FormField}" />
-
-                        <TextBlock Margin="0,12,0,5"
-                                   FontSize="11.5"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   Text="API Key" />
-                        <PasswordBox x:Name="ApiKeyBox"
-                                     Height="44"
-                                     Padding="12,8"
-                                     VerticalContentAlignment="Center"
-                                     FontSize="14"
-                                     Foreground="{StaticResource InkBrush}"
-                                     CaretBrush="{StaticResource AccentBrush}" />
-
-                        <TextBlock Margin="0,12,0,5"
-                                   FontSize="11.5"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   Text="模型列表（每行一个，也会显示在窗口底部）" />
-                        <TextBox x:Name="ModelsBox"
-                                 Height="82"
-                                 Padding="10,8"
-                                 AcceptsReturn="True"
-                                 TextWrapping="NoWrap"
-                                 VerticalContentAlignment="Top"
-                                 VerticalScrollBarVisibility="Auto"
-                                 FontFamily="Cascadia Mono, Consolas"
-                                 FontSize="13"
-                                 Foreground="{StaticResource InkBrush}"
-                                 Background="White"
-                                 BorderBrush="{StaticResource LineBrush}"
-                                 BorderThickness="1" />
-
-                        <CheckBox x:Name="ReasoningCheck"
-                                  Margin="0,14,0,0"
-                                  FontSize="13"
-                                  Foreground="{StaticResource InkBrush}"
-                                  Content="支持推理强度控制（仅“深度思考”使用，其他模式显式关闭）" />
-
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="150" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock VerticalAlignment="Center"
-                                       FontSize="11.5"
-                                       Foreground="{StaticResource MutedBrush}"
-                                       Text="深度思考强度" />
-                            <ComboBox x:Name="ReasoningEffortComboBox"
-                                      Grid.Column="1"
-                                      Margin="12,0,0,0"
-                                      Style="{StaticResource ComboField}" />
-                        </Grid>
-
-                        <Separator Margin="0,20,0,16"
-                                   Background="{StaticResource LineBrush}" />
-
-                        <TextBlock FontSize="13"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource InkBrush}"
-                                   Text="窗口与联网搜索" />
-
-                        <TextBlock Margin="0,12,0,5"
-                                   FontSize="11.5"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   Text="Tavily API Key（新闻追踪与联网解释）" />
-                        <PasswordBox x:Name="TavilyKeyBox"
-                                     Height="44"
-                                     Padding="12,8"
-                                     VerticalContentAlignment="Center"
-                                     FontSize="14"
-                                     Foreground="{StaticResource InkBrush}"
-                                     CaretBrush="{StaticResource AccentBrush}" />
-
-                        <CheckBox x:Name="TopMostCheck"
-                                  Margin="0,15,0,0"
-                                  FontSize="13"
-                                  Foreground="{StaticResource InkBrush}"
-                                  Content="窗口始终置顶" />
-                        <CheckBox x:Name="StartWithWindowsCheck"
-                                  Margin="0,9,0,0"
-                                  FontSize="13"
-                                  Foreground="{StaticResource InkBrush}"
-                                  Content="开机时自动启动 AskAny" />
-                        <CheckBox x:Name="HideWhenDeactivatedCheck"
-                                  Margin="0,9,0,0"
-                                  FontSize="13"
-                                  Foreground="{StaticResource InkBrush}"
-                                  Content="窗口失去焦点后自动隐藏" />
-                        <CheckBox x:Name="AutoFillSelectionCheck"
-                                  Margin="0,9,0,0"
-                                  FontSize="13"
-                                  Foreground="{StaticResource InkBrush}"
-                                  Content="双击 Shift 时自动填入当前选中的文字" />
-
-                        <TextBlock Margin="0,17,0,0"
-                                   FontSize="11"
-                                   Foreground="{StaticResource MutedBrush}"
-                                   TextWrapping="Wrap"
-                                   Text="API 密钥使用 Windows DPAPI 按当前用户加密保存在本机。Responses 协议按提供商文档发送 reasoning.effort。" />
-                    </StackPanel>
-                </ScrollViewer>
+                <TabControl x:Name="SettingsTabs" Grid.Column="2" Margin="12,12,16,8" Background="Transparent" BorderThickness="0">
+                    <TabItem Header="模型连接">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="18,16,18,20">
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="接口信息" />
+                                <TextBlock Margin="0,10,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="提供商名称" />
+                                <TextBox x:Name="ProviderNameBox" Style="{StaticResource FormField}" />
+                                <TextBlock Margin="0,12,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="API 协议" />
+                                <ComboBox x:Name="ProtocolComboBox" Height="36" DisplayMemberPath="Name" Style="{StaticResource ComboField}" />
+                                <TextBlock Margin="0,12,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="接口地址" />
+                                <TextBox x:Name="BaseUriBox" Style="{StaticResource FormField}" />
+                                <TextBlock Margin="0,12,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="API Key" />
+                                <PasswordBox x:Name="ApiKeyBox" />
+                                <TextBlock Margin="0,16,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="模型列表 · 每行一个" />
+                                <TextBox x:Name="ModelsBox" Height="100" Padding="10,8" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" FontSize="13" Foreground="{StaticResource InkBrush}" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="推理与搜索">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="18,16,18,20">
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="推理" />
+                                <CheckBox x:Name="ReasoningCheck" Margin="0,12,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="此提供商支持推理强度控制" Checked="ReasoningCheck_Changed" Unchecked="ReasoningCheck_Changed" />
+                                <Grid Margin="0,10,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="推理强度" />
+                                    <ComboBox x:Name="ReasoningEffortComboBox" Grid.Column="1" Margin="14,0,0,0" Style="{StaticResource ComboField}" />
+                                </Grid>
+                                <Separator Margin="0,22,0,18" Background="{StaticResource LineBrush}" />
+                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="联网搜索" />
+                                <TextBlock Margin="0,12,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="Tavily API Key" />
+                                <PasswordBox x:Name="TavilyKeyBox" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="窗口偏好">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="18,16,18,20">
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="启动与窗口行为" />
+                                <CheckBox x:Name="TopMostCheck" FontSize="13" Foreground="{StaticResource InkBrush}" Content="窗口始终置顶" />
+                                <CheckBox x:Name="StartWithWindowsCheck" Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="开机时自动启动" />
+                                <CheckBox x:Name="HideWhenDeactivatedCheck" Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="失去焦点后自动隐藏" />
+                                <CheckBox x:Name="AutoFillSelectionCheck" Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="自动填入选中文字" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
             </Grid>
 
             <Grid Grid.Row="3" Margin="18,9">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock x:Name="SettingsStatusText"
-                           VerticalAlignment="Center"
-                           FontSize="11.5"
-                           Foreground="{StaticResource MutedBrush}" />
-                <Button x:Name="TestButton"
-                        Grid.Column="1"
-                        Margin="0,0,9,0"
-                        Style="{StaticResource SecondaryButton}"
-                        Content="测试当前提供商"
-                        Click="TestButton_Click" />
-                <Button Grid.Column="2"
-                        MinWidth="84"
-                        Margin="0,0,9,0"
-                        Style="{StaticResource SecondaryButton}"
-                        Content="取消"
-                        Click="CloseButton_Click" />
-                <Button x:Name="SaveButton"
-                        Grid.Column="3"
-                        MinWidth="90"
-                        Style="{StaticResource PrimaryButton}"
-                        Content="保存"
-                        Click="SaveButton_Click" />
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <TextBlock x:Name="SettingsStatusText" VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" TextTrimming="CharacterEllipsis" />
+                <Button x:Name="TestButton" Grid.Column="1" Margin="0,0,9,0" Style="{StaticResource SecondaryButton}" Content="测试连接" Click="TestButton_Click" />
+                <Button Grid.Column="2" MinWidth="84" Margin="0,0,9,0" Style="{StaticResource SecondaryButton}" Content="取消" Click="CloseButton_Click" />
+                <Button x:Name="SaveButton" Grid.Column="3" MinWidth="90" Style="{StaticResource PrimaryButton}" Content="保存" Click="SaveButton_Click" />
             </Grid>
         </Grid>
     </Border>
