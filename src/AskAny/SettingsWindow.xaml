@@ -75,6 +75,7 @@
                         </ListBox.ItemContainerStyle>
                     </ListBox>
                     <StackPanel Grid.Row="2" Margin="0,12,0,0">
+                        <TextBlock Margin="3,0,0,6" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="新增预设" />
                         <ComboBox x:Name="PresetComboBox" Height="36" DisplayMemberPath="Name" Style="{StaticResource ComboField}" />
                         <Grid Margin="0,8,0,0">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -99,15 +100,15 @@
                                 <TextBlock Margin="0,12,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="API Key" />
                                 <PasswordBox x:Name="ApiKeyBox" />
                                 <TextBlock Margin="0,16,0,5" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="模型列表 · 每行一个" />
-                                <TextBox x:Name="ModelsBox" Height="100" Padding="10,8" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" FontSize="13" Foreground="{StaticResource InkBrush}" Background="White" BorderBrush="{StaticResource LineBrush}" BorderThickness="1" />
+                                <TextBox x:Name="ModelsBox" Height="100" Padding="10,8" AcceptsReturn="True" TextWrapping="NoWrap" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" FontFamily="Cascadia Mono, Consolas" FontSize="13" Style="{StaticResource FormField}" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>
                     <TabItem Header="推理与搜索">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="18,16,18,20">
-                                <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="推理" />
-                                <CheckBox x:Name="ReasoningCheck" Margin="0,12,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="此提供商支持推理强度控制" Checked="ReasoningCheck_Changed" Unchecked="ReasoningCheck_Changed" />
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="推理控制" />
+                                <CheckBox x:Name="ReasoningCheck" Margin="0,10,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="启用推理强度控制" Checked="ReasoningCheck_Changed" Unchecked="ReasoningCheck_Changed" />
                                 <Grid Margin="0,10,0,0">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="150" /></Grid.ColumnDefinitions>
                                     <TextBlock VerticalAlignment="Center" FontSize="12" Foreground="{StaticResource MutedBrush}" Text="推理强度" />
@@ -123,11 +124,15 @@
                     <TabItem Header="窗口偏好">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="18,16,18,20">
-                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MutedBrush}" Text="启动与窗口行为" />
-                                <CheckBox x:Name="TopMostCheck" FontSize="13" Foreground="{StaticResource InkBrush}" Content="窗口始终置顶" />
-                                <CheckBox x:Name="StartWithWindowsCheck" Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="开机时自动启动" />
-                                <CheckBox x:Name="HideWhenDeactivatedCheck" Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="失去焦点后自动隐藏" />
-                                <CheckBox x:Name="AutoFillSelectionCheck" Margin="0,14,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="自动填入选中文字" />
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="窗口行为" />
+                                <CheckBox x:Name="TopMostCheck" Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="窗口始终置顶" />
+                                <CheckBox x:Name="HideWhenDeactivatedCheck" Margin="0,2,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="失去焦点后自动隐藏" />
+                                <Separator Margin="0,14,0,12" Background="{StaticResource LineBrush}" />
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="启动" />
+                                <CheckBox x:Name="StartWithWindowsCheck" Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="开机时自动启动" />
+                                <Separator Margin="0,14,0,12" Background="{StaticResource LineBrush}" />
+                                <TextBlock FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Text="输入" />
+                                <CheckBox x:Name="AutoFillSelectionCheck" Margin="0,8,0,0" FontSize="13" Foreground="{StaticResource InkBrush}" Content="自动填入选中文字" />
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>

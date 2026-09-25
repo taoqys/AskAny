@@ -188,19 +188,13 @@
                                         </TextBlock>
                                     </Grid>
                                 </Border>
-                                <StackPanel Grid.Column="1"
-                                            Margin="9,0,8,0"
-                                            VerticalAlignment="Center">
-                                    <TextBlock FontSize="15"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource InkBrush}"
-                                               Text="{Binding Name}" />
-                                    <TextBlock Margin="0,2,0,0"
-                                               FontSize="11.5"
-                                               Foreground="{StaticResource MutedBrush}"
-                                               Text="{Binding Description}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
+                                <TextBlock Grid.Column="1"
+                                           Margin="9,0,8,0"
+                                           VerticalAlignment="Center"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource InkBrush}"
+                                           Text="{Binding Name}" />
                                 <TextBlock Grid.Column="2"
                                            Margin="8,0,4,0"
                                            VerticalAlignment="Center"
