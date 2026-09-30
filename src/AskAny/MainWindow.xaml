@@ -48,12 +48,15 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <Image Width="38"
-                       Height="38"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       SnapsToDevicePixels="True"
-                       Source="Assets/AskAny-transparent.png" />
+                <TextBlock Width="26"
+                           Height="26"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="18"
+                           Foreground="#6E737C"
+                           Text="&#xE721;"
+                           TextAlignment="Center" />
 
                 <Grid Grid.Column="1" Margin="8,0,4,0">
                     <Border x:Name="PromptEditorBorder"
@@ -117,17 +120,8 @@
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0"
-                           Margin="18,10,12,2"
-                           Style="{StaticResource SectionTitle}"
-                           Text="选择方式" />
                 <ListBox x:Name="FunctionList"
-                         Grid.Row="1"
-                         Margin="12,10"
+                         Margin="12,14,12,10"
                          BorderThickness="0"
                          Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -217,7 +211,6 @@
                 </ListBox>
 
                 <Grid x:Name="ResponsePanel"
-                      Grid.Row="1"
                       Margin="14,10"
                       Visibility="Collapsed">
                     <Grid.RowDefinitions>
