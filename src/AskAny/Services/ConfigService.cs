@@ -99,6 +99,24 @@ public sealed class ConfigService
             {
                 provider.ReasoningEffort = "high";
             }
+
+            if (!provider.VisionModelsConfigured)
+            {
+                provider.VisionModels = provider.BaseUri.Contains(
+                    "api.openai.com",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? provider.Models.ToList()
+                    : [];
+                provider.VisionModelsConfigured = true;
+            }
+            else
+            {
+                provider.VisionModels = (provider.VisionModels ?? [])
+                    .Where(model => !string.IsNullOrWhiteSpace(model))
+                    .Select(model => model.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
         }
 
         var selected = config.Providers.FirstOrDefault(

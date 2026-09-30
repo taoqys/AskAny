@@ -33,15 +33,23 @@
 
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition x:Name="PromptRowDefinition" Height="76" />
+                <RowDefinition x:Name="PromptRowDefinition" Height="Auto" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="58" />
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0"
+                  MinHeight="58"
                   Margin="14,8,8,8"
-                  MouseLeftButtonDown="Header_MouseLeftButtonDown">
+                  MouseLeftButtonDown="Header_MouseLeftButtonDown"
+                  AllowDrop="True"
+                  DragOver="Input_DragOver"
+                  Drop="Input_Drop">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="52" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="46" />
                     <ColumnDefinition Width="*" />
@@ -62,7 +70,10 @@
                     <Border x:Name="PromptEditorBorder"
                             Background="Transparent"
                             BorderBrush="{StaticResource LineBrush}"
-                            BorderThickness="0,0,0,1">
+                            BorderThickness="0,0,0,1"
+                            AllowDrop="True"
+                            DragOver="Input_DragOver"
+                            Drop="Input_Drop">
                         <Grid>
                             <TextBox x:Name="PromptBox"
                                      MinHeight="52"
@@ -100,6 +111,14 @@
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
+                    <Button x:Name="AttachmentButton"
+                            Style="{StaticResource IconButton}"
+                            ToolTip="添加图片（Ctrl+V 粘贴或拖入图片）"
+                            Click="AttachmentButton_Click">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   FontSize="17"
+                                   Text="&#xE8B9;" />
+                    </Button>
                     <Button Style="{StaticResource IconButton}"
                             ToolTip="设置（F1）"
                             Click="SettingsButton_Click">
@@ -114,6 +133,64 @@
                                    FontSize="16"
                                    Text="&#xE711;" />
                     </Button>
+                </StackPanel>
+
+                <StackPanel x:Name="AttachmentPanel"
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Grid.ColumnSpan="2"
+                            Margin="8,4,4,2"
+                            Visibility="Collapsed">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="AttachmentItems">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="52"
+                                            Height="52"
+                                            Margin="0,0,7,0"
+                                            Background="#F4F5F7"
+                                            BorderBrush="{StaticResource LineBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="5">
+                                        <Grid>
+                                            <Image Margin="2"
+                                                   Source="{Binding Preview}"
+                                                   Stretch="UniformToFill" />
+                                            <Button Width="18"
+                                                    Height="18"
+                                                    Margin="0,-4,-4,0"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Background="#CC202124"
+                                                    BorderThickness="0"
+                                                    Cursor="Hand"
+                                                    Tag="{Binding}"
+                                                    ToolTip="移除图片"
+                                                    Click="RemoveAttachmentButton_Click">
+                                                <TextBlock HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="9"
+                                                           Foreground="White"
+                                                           Text="&#xE711;" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock x:Name="AttachmentTargetText"
+                               Margin="1,5,0,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Grid>
 

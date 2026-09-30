@@ -273,6 +273,17 @@
                                                  FontFamily="Cascadia Mono, Consolas"
                                                  FontSize="13"
                                                  Style="{StaticResource FormField}" />
+                                        <TextBlock Style="{StaticResource FieldLabel}" Text="支持图片的模型（每行一个）" />
+                                        <TextBox x:Name="VisionModelsBox"
+                                                 Height="86"
+                                                 Padding="11,8"
+                                                 AcceptsReturn="True"
+                                                 TextWrapping="NoWrap"
+                                                 VerticalContentAlignment="Top"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 FontFamily="Cascadia Mono, Consolas"
+                                                 FontSize="13"
+                                                 Style="{StaticResource FormField}" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

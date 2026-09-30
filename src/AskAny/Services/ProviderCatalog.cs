@@ -25,6 +25,8 @@ public static class ProviderCatalog
                 BaseUri = "https://api.openai.com/v1",
                 Models = ["gpt-4.1-mini", "gpt-4.1", "gpt-5.1"],
                 SelectedModel = "gpt-4.1-mini",
+                VisionModels = ["gpt-4.1-mini", "gpt-4.1", "gpt-5.1"],
+                VisionModelsConfigured = true,
                 SupportsReasoningControl = true,
                 ReasoningEffort = "high"
             },
@@ -36,6 +38,8 @@ public static class ProviderCatalog
                 BaseUri = "https://api.openai.com/v1",
                 Models = ["gpt-5.1", "gpt-5.1-mini", "gpt-4.1"],
                 SelectedModel = "gpt-5.1",
+                VisionModels = ["gpt-5.1", "gpt-5.1-mini", "gpt-4.1"],
+                VisionModelsConfigured = true,
                 SupportsReasoningControl = true,
                 ReasoningEffort = "high"
             },
@@ -47,6 +51,8 @@ public static class ProviderCatalog
                 BaseUri = "https://api.deepseek.com",
                 Models = ["deepseek-flash", "deepseek-v4-pro"],
                 SelectedModel = "deepseek-flash",
+                VisionModels = [],
+                VisionModelsConfigured = true,
                 SupportsReasoningControl = true,
                 ReasoningEffort = "high"
             },
@@ -58,6 +64,8 @@ public static class ProviderCatalog
                 BaseUri = "https://api.example.com/v1",
                 Models = ["model-name"],
                 SelectedModel = "model-name",
+                VisionModels = [],
+                VisionModelsConfigured = true,
                 SupportsReasoningControl = false,
                 ReasoningEffort = "high"
             }

@@ -271,6 +271,7 @@ public partial class SettingsWindow : Window
             BaseUriBox.Text = provider.BaseUri;
             ApiKeyBox.Password = ConfigService.Unprotect(provider.ApiKeyProtected);
             ModelsBox.Text = string.Join(Environment.NewLine, provider.Models);
+            VisionModelsBox.Text = string.Join(Environment.NewLine, provider.VisionModels);
             ReasoningCheck.IsChecked = provider.SupportsReasoningControl;
             ReasoningEffortComboBox.SelectedItem = ReasoningEffortComboBox.Items
                 .Cast<string>()
@@ -315,6 +316,9 @@ public partial class SettingsWindow : Window
         {
             _selectedProvider.SelectedModel = _selectedProvider.Models[0];
         }
+
+        _selectedProvider.VisionModels = ParseModels(VisionModelsBox.Text);
+        _selectedProvider.VisionModelsConfigured = true;
 
         _selectedProvider.SupportsReasoningControl = ReasoningCheck.IsChecked == true;
         _selectedProvider.ReasoningEffort = ReasoningEffortComboBox.SelectedItem as string ?? "high";

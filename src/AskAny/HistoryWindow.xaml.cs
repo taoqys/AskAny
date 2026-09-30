@@ -77,6 +77,7 @@ public partial class HistoryWindow : Window
         DetailTitleText.Text = entry.Prompt;
         DetailMetaText.Text =
             $"{entry.Timestamp:yyyy-MM-dd HH:mm} · {entry.ModeName} · {entry.ProviderName} / {entry.Model}" +
+            (entry.ImageCount > 0 ? $" · {entry.ImageCount} 张图片" : string.Empty) +
             (entry.SourceCount > 0 ? $" · {entry.SourceCount} 条来源" : string.Empty);
         DetailRichText.Document = MarkdownRenderer.Render(entry.Response);
         DetailRichText.ScrollToHome();

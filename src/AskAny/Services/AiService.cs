@@ -18,6 +18,7 @@ public sealed class AiService
         ProviderConfig provider,
         string apiKey,
         SearchPacket? search,
+        IReadOnlyList<ImageAttachment>? images = null,
         IReadOnlyList<ConversationTurn>? conversation = null,
         CancellationToken cancellationToken = default)
     {
@@ -38,6 +39,7 @@ public sealed class AiService
             prompt,
             provider,
             systemPrompt,
+            images,
             conversation);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
@@ -78,6 +80,7 @@ public sealed class AiService
             apiKey,
             null,
             null,
+            null,
             cancellationToken);
     }
 
@@ -86,6 +89,7 @@ public sealed class AiService
         string prompt,
         ProviderConfig provider,
         string systemPrompt,
+        IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<ConversationTurn>? conversation)
     {
         var isThinking = function.Mode == WorkflowMode.Think;
@@ -95,21 +99,23 @@ public sealed class AiService
             var input = new List<object>();
             foreach (var turn in conversation ?? [])
             {
-                if (turn.Role is "user" or "assistant" &&
-                    !string.IsNullOrWhiteSpace(turn.Content))
+                if (turn.Role is not ("user" or "assistant") ||
+                    string.IsNullOrWhiteSpace(turn.Content))
                 {
-                    input.Add(new Dictionary<string, object?>
-                    {
-                        ["role"] = turn.Role,
-                        ["content"] = turn.Content
-                    });
+                    continue;
                 }
+
+                input.Add(new Dictionary<string, object?>
+                {
+                    ["role"] = turn.Role,
+                    ["content"] = BuildResponsesContent(turn.Content, turn.Images)
+                });
             }
 
             input.Add(new Dictionary<string, object?>
             {
                 ["role"] = "user",
-                ["content"] = prompt
+                ["content"] = BuildResponsesContent(prompt, images)
             });
 
             var body = new Dictionary<string, object?>
@@ -143,18 +149,32 @@ public sealed class AiService
 
         var messages = new List<object>
         {
-            new ChatMessage("system", systemPrompt)
+            new Dictionary<string, object?>
+            {
+                ["role"] = "system",
+                ["content"] = systemPrompt
+            }
         };
         foreach (var turn in conversation ?? [])
         {
-            if (turn.Role is "user" or "assistant" &&
-                !string.IsNullOrWhiteSpace(turn.Content))
+            if (turn.Role is not ("user" or "assistant") ||
+                string.IsNullOrWhiteSpace(turn.Content))
             {
-                messages.Add(new ChatMessage(turn.Role, turn.Content));
+                continue;
             }
+
+            messages.Add(new Dictionary<string, object?>
+            {
+                ["role"] = turn.Role,
+                ["content"] = BuildChatContent(turn.Content, turn.Images)
+            });
         }
 
-        messages.Add(new ChatMessage("user", prompt));
+        messages.Add(new Dictionary<string, object?>
+        {
+            ["role"] = "user",
+            ["content"] = BuildChatContent(prompt, images)
+        });
 
         var chatBody = new Dictionary<string, object?>
         {
@@ -176,6 +196,64 @@ public sealed class AiService
         }
 
         return chatBody;
+    }
+
+    private static object BuildResponsesContent(
+        string text,
+        IReadOnlyList<ImageAttachment>? images)
+    {
+        if (images is null || images.Count == 0)
+        {
+            return text;
+        }
+
+        var content = new List<object>
+        {
+            new Dictionary<string, object?>
+            {
+                ["type"] = "input_text",
+                ["text"] = text
+            }
+        };
+        content.AddRange(images.Select(image => new Dictionary<string, object?>
+        {
+            ["type"] = "input_image",
+            ["image_url"] = ToDataUrl(image)
+        }));
+        return content;
+    }
+
+    private static object BuildChatContent(
+        string text,
+        IReadOnlyList<ImageAttachment>? images)
+    {
+        if (images is null || images.Count == 0)
+        {
+            return text;
+        }
+
+        var content = new List<object>
+        {
+            new Dictionary<string, object?>
+            {
+                ["type"] = "text",
+                ["text"] = text
+            }
+        };
+        content.AddRange(images.Select(image => new Dictionary<string, object?>
+        {
+            ["type"] = "image_url",
+            ["image_url"] = new Dictionary<string, object?>
+            {
+                ["url"] = ToDataUrl(image)
+            }
+        }));
+        return content;
+    }
+
+    private static string ToDataUrl(ImageAttachment image)
+    {
+        return $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
     }
 
     private static AiResult ParseChatCompletions(string payload)

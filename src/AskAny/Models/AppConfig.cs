@@ -1,3 +1,5 @@
+using System.Windows.Media.Imaging;
+
 namespace AskAny.Models;
 
 public enum WorkflowMode
@@ -42,13 +44,28 @@ public sealed class FunctionOption
     }
 }
 
-public sealed record ConversationTurn(string Role, string Content);
+public sealed class ImageAttachment
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string FileName { get; set; } = "image.png";
+    public string MediaType { get; set; } = "image/png";
+    public byte[] Bytes { get; set; } = [];
+    public int PixelWidth { get; set; }
+    public int PixelHeight { get; set; }
+    public BitmapSource? Preview { get; set; }
+}
+
+public sealed record ConversationTurn(
+    string Role,
+    string Content,
+    IReadOnlyList<ImageAttachment>? Images = null);
 
 public sealed record AiResult(string Answer, string? Reasoning = null);
 
 public sealed record ModelChoice(ProviderConfig Provider, string Model)
 {
     public string DisplayName => $"{Provider.Name} · {Model}";
+    public bool SupportsVision => Provider.SupportsVisionModel(Model);
 }
 
 public sealed class ProviderConfig
@@ -60,6 +77,8 @@ public sealed class ProviderConfig
     public string ApiKeyProtected { get; set; } = string.Empty;
     public List<string> Models { get; set; } = [];
     public string SelectedModel { get; set; } = string.Empty;
+    public List<string> VisionModels { get; set; } = [];
+    public bool VisionModelsConfigured { get; set; }
     public bool SupportsReasoningControl { get; set; } = true;
     public string ReasoningEffort { get; set; } = "high";
 
@@ -74,9 +93,25 @@ public sealed class ProviderConfig
             ApiKeyProtected = ApiKeyProtected,
             Models = [.. Models],
             SelectedModel = SelectedModel,
+            VisionModels = [.. VisionModels],
+            VisionModelsConfigured = VisionModelsConfigured,
             SupportsReasoningControl = SupportsReasoningControl,
             ReasoningEffort = ReasoningEffort
         };
+    }
+
+    public bool SupportsVisionModel(string model)
+    {
+        if (string.IsNullOrWhiteSpace(model) || VisionModels is null || VisionModels.Count == 0)
+        {
+            return false;
+        }
+
+        return VisionModels.Any(pattern =>
+            pattern == "*" ||
+            pattern.Equals(model, StringComparison.OrdinalIgnoreCase) ||
+            (pattern.EndsWith('*') &&
+             model.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase)));
     }
 }
 
@@ -109,9 +144,11 @@ public sealed class HistoryEntry
     public string Prompt { get; set; } = string.Empty;
     public string Response { get; set; } = string.Empty;
     public string Reasoning { get; set; } = string.Empty;
+    public int ImageCount { get; set; }
     public int SourceCount { get; set; }
 
     [JsonIgnore]
     public string DisplayMeta =>
-        $"{Timestamp:MM-dd HH:mm} · {ModeName} · {ProviderName} / {Model}";
+        $"{Timestamp:MM-dd HH:mm} · {ModeName} · {ProviderName} / {Model}" +
+        (ImageCount > 0 ? $" · {ImageCount} 张图片" : string.Empty);
 }

@@ -16,6 +16,8 @@ namespace AskAny;
 
 public partial class MainWindow : Window
 {
+    private const string ImageOnlyPrompt = "请详细描述并分析这张图片。";
+
     private readonly ConfigService _configService;
     private readonly AiService _aiService;
     private readonly SearchService _searchService;
@@ -27,12 +29,14 @@ public partial class MainWindow : Window
     private FunctionOption? _activeFunction;
     private List<ModelChoice> _modelChoices = [];
     private readonly List<ConversationTurn> _conversation = [];
+    private readonly List<ImageAttachment> _pendingAttachments = [];
     private bool _isRunning;
     private bool _allowClose;
     private bool _suppressDeactivateHide;
     private bool _isRefreshingModels;
     private bool _isFocusingPrompt;
     private bool _isFollowUpInput;
+    private bool _isCapturingScreenshot;
     private string _lastAnswer = string.Empty;
 
     public MainWindow(
@@ -50,6 +54,7 @@ public partial class MainWindow : Window
 
         FunctionList.ItemsSource = _functions;
         FunctionList.SelectedIndex = 0;
+        AttachmentItems.ItemsSource = _pendingAttachments;
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
@@ -128,6 +133,26 @@ public partial class MainWindow : Window
         {
             Hide();
             e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.V &&
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
+            PromptEditorBorder.Visibility == Visibility.Visible)
+        {
+            if (TryPasteImageFromClipboard())
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (e.Key == Key.A &&
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
+            Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            e.Handled = true;
+            _ = CaptureRegionAsync();
             return;
         }
 
@@ -394,9 +419,9 @@ public partial class MainWindow : Window
         }
 
         var prompt = PromptBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(prompt))
+        if (string.IsNullOrWhiteSpace(prompt) && _pendingAttachments.Count == 0)
         {
-            StatusText.Text = "请先输入问题";
+            StatusText.Text = "请输入问题或添加图片";
             PromptBox.Focus();
             return;
         }
@@ -413,9 +438,23 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_pendingAttachments.Count > 0 &&
+            !_currentProvider.SupportsVisionModel(_currentProvider.SelectedModel))
+        {
+            StatusText.Text = "当前模型未启用图片能力，请切换模型或到设置中配置";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            prompt = ImageOnlyPrompt;
+        }
+
+        var attachments = _pendingAttachments.ToArray();
+        ClearPendingAttachments();
         _conversation.Clear();
         _activeFunction = option;
-        await ExecuteTurnAsync(prompt, option, _currentProvider);
+        await ExecuteTurnAsync(prompt, option, _currentProvider, attachments);
     }
 
     private async Task ExecuteFollowUpAsync()
@@ -426,8 +465,9 @@ public partial class MainWindow : Window
         }
 
         var prompt = PromptBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(prompt))
+        if (string.IsNullOrWhiteSpace(prompt) && _pendingAttachments.Count == 0)
         {
+            StatusText.Text = "请输入追问或添加图片";
             PromptBox.Focus();
             return;
         }
@@ -438,20 +478,35 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_pendingAttachments.Count > 0 &&
+            !_currentProvider.SupportsVisionModel(_currentProvider.SelectedModel))
+        {
+            StatusText.Text = "当前模型未启用图片能力，请切换模型或到设置中配置";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            prompt = ImageOnlyPrompt;
+        }
+
+        var attachments = _pendingAttachments.ToArray();
+        ClearPendingAttachments();
         _isFollowUpInput = false;
-        await ExecuteTurnAsync(prompt, _activeFunction, _currentProvider);
+        await ExecuteTurnAsync(prompt, _activeFunction, _currentProvider, attachments);
     }
 
     private async Task ExecuteTurnAsync(
         string prompt,
         FunctionOption option,
-        ProviderConfig provider)
+        ProviderConfig provider,
+        IReadOnlyList<ImageAttachment> images)
     {
         _isRunning = true;
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
-        SetResponsePromptDisplay(prompt);
+        SetResponsePromptDisplay(prompt, images.Count);
         ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(
@@ -484,13 +539,14 @@ public partial class MainWindow : Window
                 provider,
                 ConfigService.Unprotect(provider.ApiKeyProtected),
                 search,
+                images,
                 _conversation.ToArray());
 
             var displayAnswer = AppendSources(result.Answer, search);
             var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
             _lastAnswer = displayAnswer;
             SetOutputMarkdown(displayAnswer, reasoning);
-            _conversation.Add(new ConversationTurn("user", prompt));
+            _conversation.Add(new ConversationTurn("user", prompt, images));
             _conversation.Add(new ConversationTurn("assistant", result.Answer));
             stopwatch.Stop();
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
@@ -508,6 +564,7 @@ public partial class MainWindow : Window
                 Prompt = prompt,
                 Response = displayAnswer,
                 Reasoning = result.Reasoning ?? string.Empty,
+                ImageCount = images.Count,
                 SourceCount = search?.Sources.Count ?? 0
             });
         }
@@ -589,6 +646,222 @@ public partial class MainWindow : Window
         PromptPlaceholder.Visibility = string.IsNullOrEmpty(PromptBox.Text)
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private void AttachmentButton_Click(object sender, RoutedEventArgs e)
+    {
+        var menu = new ContextMenu
+        {
+            PlacementTarget = AttachmentButton
+        };
+
+        var screenshotItem = new MenuItem { Header = "区域截图（Ctrl+Shift+A）" };
+        screenshotItem.Click += async (_, _) => await CaptureRegionAsync();
+        var fileItem = new MenuItem { Header = "选择图片" };
+        fileItem.Click += (_, _) => ChooseImageFiles();
+        var pasteItem = new MenuItem { Header = "从剪贴板粘贴" };
+        pasteItem.Click += (_, _) => TryPasteImageFromClipboard();
+
+        menu.Items.Add(screenshotItem);
+        menu.Items.Add(fileItem);
+        menu.Items.Add(pasteItem);
+        menu.IsOpen = true;
+    }
+
+    private void ChooseImageFiles()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择图片",
+            Filter = "图片文件 (*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.gif",
+            Multiselect = true,
+            CheckFileExists = true
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            _ = AddImageFilesAsync(dialog.FileNames);
+        }
+    }
+
+    private bool TryPasteImageFromClipboard()
+    {
+        try
+        {
+            if (!Clipboard.ContainsImage())
+            {
+                return false;
+            }
+
+            var image = Clipboard.GetImage();
+            if (image is null)
+            {
+                return false;
+            }
+
+            var attachment = ImageAttachmentService.FromBitmapSource(
+                image,
+                $"剪贴板-{DateTime.Now:yyyyMMdd-HHmmss}.png",
+                preferPng: true);
+            return AddAttachment(attachment);
+        }
+        catch (Exception)
+        {
+            StatusText.Text = "无法读取剪贴板中的图片";
+            return false;
+        }
+    }
+
+    private async Task CaptureRegionAsync()
+    {
+        if (_isCapturingScreenshot || _isRunning)
+        {
+            return;
+        }
+
+        _isCapturingScreenshot = true;
+        _suppressDeactivateHide = true;
+        var wasVisible = IsVisible;
+        try
+        {
+            Hide();
+            await Task.Delay(140);
+            var attachment = ScreenCaptureService.CaptureRegion();
+            if (attachment is not null)
+            {
+                AddAttachment(attachment);
+            }
+        }
+        catch (Exception exception)
+        {
+            StatusText.Text = $"截图失败：{exception.Message}";
+        }
+        finally
+        {
+            _isCapturingScreenshot = false;
+            _suppressDeactivateHide = false;
+            if (wasVisible)
+            {
+                Show();
+                Activate();
+                FocusPromptEditor();
+            }
+        }
+    }
+
+    private async Task AddImageFilesAsync(IEnumerable<string> paths)
+    {
+        foreach (var path in paths)
+        {
+            if (_pendingAttachments.Count >= ImageAttachmentService.MaximumImageCount)
+            {
+                StatusText.Text = $"最多添加 {ImageAttachmentService.MaximumImageCount} 张图片";
+                break;
+            }
+
+            try
+            {
+                var attachment = await ImageAttachmentService.FromFileAsync(path);
+                AddAttachment(attachment, refresh: false);
+            }
+            catch (Exception)
+            {
+                StatusText.Text = $"无法添加图片：{Path.GetFileName(path)}";
+            }
+        }
+
+        RefreshAttachmentPanel();
+        FocusPromptEditor();
+    }
+
+    private bool AddAttachment(ImageAttachment attachment, bool refresh = true)
+    {
+        if (_pendingAttachments.Count >= ImageAttachmentService.MaximumImageCount)
+        {
+            StatusText.Text = $"最多添加 {ImageAttachmentService.MaximumImageCount} 张图片";
+            return false;
+        }
+
+        _pendingAttachments.Add(attachment);
+        if (refresh)
+        {
+            RefreshAttachmentPanel();
+        }
+
+        return true;
+    }
+
+    private void RemoveAttachmentButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: ImageAttachment attachment })
+        {
+            return;
+        }
+
+        _pendingAttachments.Remove(attachment);
+        RefreshAttachmentPanel();
+    }
+
+    private void RefreshAttachmentPanel()
+    {
+        AttachmentItems.ItemsSource = null;
+        AttachmentItems.ItemsSource = _pendingAttachments;
+        AttachmentPanel.Visibility = _pendingAttachments.Count == 0
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        UpdateAttachmentTargetText();
+    }
+
+    private void ClearPendingAttachments()
+    {
+        if (_pendingAttachments.Count == 0)
+        {
+            AttachmentPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _pendingAttachments.Clear();
+        RefreshAttachmentPanel();
+    }
+
+    private void UpdateAttachmentTargetText()
+    {
+        if (_pendingAttachments.Count == 0 ||
+            _currentProvider is null ||
+            string.IsNullOrWhiteSpace(_currentProvider.SelectedModel))
+        {
+            return;
+        }
+
+        if (_currentProvider.SupportsVisionModel(_currentProvider.SelectedModel))
+        {
+            AttachmentTargetText.Foreground = new SolidColorBrush(Color.FromRgb(116, 117, 122));
+            AttachmentTargetText.Text =
+                $"将发送到：{_currentProvider.Name} · {_currentProvider.SelectedModel}";
+            return;
+        }
+
+        AttachmentTargetText.Foreground = new SolidColorBrush(Color.FromRgb(190, 96, 42));
+        AttachmentTargetText.Text = "当前模型未启用图片能力，请切换模型或到设置中配置";
+    }
+
+    private void Input_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Input_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] files || files.Length == 0)
+        {
+            return;
+        }
+
+        _ = AddImageFilesAsync(files);
+        e.Handled = true;
     }
 
     private void FunctionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -675,6 +948,7 @@ public partial class MainWindow : Window
             ModelComboBox.SelectedItem = preferred;
             ModelComboBox.Text = preferred?.DisplayName ?? string.Empty;
             ModelComboBox.ToolTip = preferred?.DisplayName ?? "请先配置模型";
+            UpdateAttachmentTargetText();
         }
         finally
         {
@@ -687,6 +961,7 @@ public partial class MainWindow : Window
         _currentProvider = choice.Provider;
         choice.Provider.SelectedModel = choice.Model;
         _config.SelectedProviderId = choice.Provider.Id;
+        UpdateAttachmentTargetText();
         _ = _configService.SaveAsync(_config);
     }
 
@@ -778,9 +1053,10 @@ public partial class MainWindow : Window
         PromptInfoText.Text = string.Empty;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(76);
+        PromptRowDefinition.Height = GridLength.Auto;
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        ClearPendingAttachments();
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
         FocusPromptEditor();
     }
@@ -796,9 +1072,10 @@ public partial class MainWindow : Window
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
         PromptPlaceholder.Text = "输入问题…";
-        PromptRowDefinition.Height = new GridLength(76);
+        PromptRowDefinition.Height = GridLength.Auto;
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        ClearPendingAttachments();
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
     }
 
@@ -816,13 +1093,16 @@ public partial class MainWindow : Window
                                     ?? _functions.FirstOrDefault();
     }
 
-    private void SetResponsePromptDisplay(string prompt)
+    private void SetResponsePromptDisplay(string prompt, int imageCount)
     {
         _isFollowUpInput = false;
-        PromptInfoText.Text = prompt;
+        PromptInfoText.Text = imageCount == 0
+            ? prompt
+            : $"{prompt} · {imageCount} 张图片";
         PromptInfoText.Visibility = Visibility.Visible;
         PromptEditorBorder.Visibility = Visibility.Collapsed;
-        PromptRowDefinition.Height = new GridLength(48);
+        AttachmentPanel.Visibility = Visibility.Collapsed;
+        PromptRowDefinition.Height = GridLength.Auto;
     }
 
     private void BeginFollowUpInput()
@@ -834,10 +1114,11 @@ public partial class MainWindow : Window
 
         _isFollowUpInput = true;
         PromptBox.Clear();
+        ClearPendingAttachments();
         PromptPlaceholder.Text = "继续提问…";
         PromptInfoText.Visibility = Visibility.Collapsed;
         PromptEditorBorder.Visibility = Visibility.Visible;
-        PromptRowDefinition.Height = new GridLength(76);
+        PromptRowDefinition.Height = GridLength.Auto;
         ResponseMetaText.Text = "输入追问后按 Enter 发送 · ← 返回";
         FocusPromptEditor();
     }
