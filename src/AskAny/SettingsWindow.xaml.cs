@@ -25,6 +25,11 @@ public partial class SettingsWindow : Window
     private bool _isLoadingFunction;
     private bool _isNavigatingSections;
 
+    // 密文存在却解不开（配置来自其他 Windows 用户或机器）时，输入框会是空的。
+    // 必须记住这一点，否则保存时会把原密文覆盖成空串，静默毁掉用户的 Key。
+    private readonly HashSet<string> _unreadableApiKeys = new(StringComparer.OrdinalIgnoreCase);
+    private bool _tavilyKeyUnreadable;
+
     public SettingsWindow(
         ConfigService configService,
         AppConfig config,
@@ -83,6 +88,8 @@ public partial class SettingsWindow : Window
         };
 
         TavilyKeyBox.Password = ConfigService.Unprotect(config.TavilyApiKeyProtected);
+        _tavilyKeyUnreadable = TavilyKeyBox.Password.Length == 0 &&
+                               !string.IsNullOrWhiteSpace(config.TavilyApiKeyProtected);
         TopMostCheck.IsChecked = config.KeepWindowOnTop;
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
         HideWhenDeactivatedCheck.IsChecked = config.HideWhenDeactivated;
@@ -125,9 +132,11 @@ public partial class SettingsWindow : Window
 
             SettingsStatusText.Text = "连接成功";
         }
-        catch (Exception exception) when (
-            exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception exception)
         {
+            // 这里刻意不过滤异常类型：地址畸形会抛 UriFormatException，网关返回 HTML 会抛
+            // JsonException，两者逃出 async void 只会弹一个原始错误框，
+            // 状态栏还会停在「正在测试当前提供商…」不动。
             SettingsStatusText.Text = exception is TaskCanceledException
                 ? "连接超时"
                 : exception.Message;
@@ -162,7 +171,10 @@ public partial class SettingsWindow : Window
         _config.Providers = _providers.Select(provider => provider.Clone()).ToList();
         _config.Functions = _functions.Select(function => function.Clone()).ToList();
         _config.SelectedProviderId = _selectedProvider!.Id;
-        _config.TavilyApiKeyProtected = ConfigService.Protect(TavilyKeyBox.Password);
+        if (TavilyKeyBox.Password.Length > 0 || !_tavilyKeyUnreadable)
+        {
+            _config.TavilyApiKeyProtected = ConfigService.Protect(TavilyKeyBox.Password);
+        }
         _config.KeepWindowOnTop = TopMostCheck.IsChecked == true;
         _config.HideWhenDeactivated = HideWhenDeactivatedCheck.IsChecked == true;
         _config.AutoFillSelectedText = AutoFillSelectionCheck.IsChecked == true;
@@ -203,7 +215,25 @@ public partial class SettingsWindow : Window
         }
 
         _selectedProvider = provider;
+        // 列表项没有实现 INotifyPropertyChanged，改名后必须重建 ItemsSource 才会重绘；
+        // 只切选中项时原来不刷新，导致刚改的名字在整场会话里都显示旧值。
+        RefreshProviderList();
         LoadProviderToForm(provider);
+    }
+
+    private void RefreshProviderList()
+    {
+        _isLoadingProvider = true;
+        try
+        {
+            ProviderList.ItemsSource = null;
+            ProviderList.ItemsSource = _providers;
+            ProviderList.SelectedItem = _selectedProvider;
+        }
+        finally
+        {
+            _isLoadingProvider = false;
+        }
     }
 
     private void ReasoningCheck_Changed(object sender, RoutedEventArgs e)
@@ -262,24 +292,10 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        var index = _providers.IndexOf(_selectedProvider);
         _providers.Remove(_selectedProvider);
-        _selectedProvider = null;
-
-        // 重建列表会触发 SelectionChanged，而那里会把表单内容写回「当前」供应商。
-        // 此刻当前供应商已被删除，必须抑制回调，否则会往已移除的对象上回写一遍表单。
-        _isLoadingProvider = true;
-        try
-        {
-            ProviderList.ItemsSource = null;
-            ProviderList.ItemsSource = _providers;
-            ProviderList.SelectedIndex = 0;
-        }
-        finally
-        {
-            _isLoadingProvider = false;
-        }
-
-        _selectedProvider = ProviderList.SelectedItem as ProviderConfig;
+        _selectedProvider = _providers[Math.Clamp(index, 0, _providers.Count - 1)];
+        RefreshProviderList();
         LoadProviderToForm(_selectedProvider);
     }
 
@@ -298,6 +314,15 @@ public partial class SettingsWindow : Window
                 .FirstOrDefault(option => option.Protocol == provider.Protocol);
             BaseUriBox.Text = provider.BaseUri;
             ApiKeyBox.Password = ConfigService.Unprotect(provider.ApiKeyProtected);
+            if (ApiKeyBox.Password.Length == 0 && !string.IsNullOrWhiteSpace(provider.ApiKeyProtected))
+            {
+                _unreadableApiKeys.Add(provider.Id);
+            }
+            else
+            {
+                _unreadableApiKeys.Remove(provider.Id);
+            }
+
             ModelsBox.Text = string.Join(Environment.NewLine, provider.Models);
             VisionModelsBox.Text = string.Join(Environment.NewLine, provider.VisionModels);
             ReasoningCheck.IsChecked = provider.SupportsReasoningControl;
@@ -307,7 +332,9 @@ public partial class SettingsWindow : Window
                     provider.ReasoningEffort,
                     StringComparison.OrdinalIgnoreCase)) ?? "high";
             ReasoningEffortComboBox.IsEnabled = provider.SupportsReasoningControl;
-            SettingsStatusText.Text = string.Empty;
+            SettingsStatusText.Text = _unreadableApiKeys.Contains(provider.Id)
+                ? "API Key 无法解密（配置可能来自其他用户或机器），请重新填写"
+                : string.Empty;
         }
         finally
         {
@@ -322,23 +349,24 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        _selectedProvider.Name = string.IsNullOrWhiteSpace(ProviderNameBox.Text)
-            ? "未命名提供商"
-            : ProviderNameBox.Text.Trim();
+        // 这里不再把空值替换成「未命名提供商」/「model-name」占位符：
+        // 那样会让 TrySaveCurrentProvider 的名称与模型校验永远不可达，
+        // 用户的清空意图被静默翻译成一个占位值写进配置。
+        _selectedProvider.Name = ProviderNameBox.Text.Trim();
         if (ProtocolComboBox.SelectedItem is ProtocolOption protocol)
         {
             _selectedProvider.Protocol = protocol.Protocol;
         }
 
         _selectedProvider.BaseUri = BaseUriBox.Text.Trim();
-        _selectedProvider.ApiKeyProtected = ConfigService.Protect(ApiKeyBox.Password);
-        _selectedProvider.Models = ParseModels(ModelsBox.Text);
-        if (_selectedProvider.Models.Count == 0)
+        if (ApiKeyBox.Password.Length > 0 || !_unreadableApiKeys.Contains(_selectedProvider.Id))
         {
-            _selectedProvider.Models = ["model-name"];
+            _selectedProvider.ApiKeyProtected = ConfigService.Protect(ApiKeyBox.Password);
         }
 
-        if (!_selectedProvider.Models.Contains(
+        _selectedProvider.Models = ParseModels(ModelsBox.Text);
+        if (_selectedProvider.Models.Count > 0 &&
+            !_selectedProvider.Models.Contains(
                 _selectedProvider.SelectedModel,
                 StringComparer.OrdinalIgnoreCase))
         {
@@ -413,6 +441,8 @@ public partial class SettingsWindow : Window
 
         SaveCurrentFunction(refreshList: false);
         _selectedFunction = function;
+        // 同理：函数列表也要重建，否则改名 / 换图标后列表项仍显示旧值。
+        RefreshFunctionEditorList();
         LoadFunctionToForm(function);
     }
 

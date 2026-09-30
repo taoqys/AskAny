@@ -589,9 +589,10 @@ public partial class MainWindow : Window
                 SourceCount = search?.Sources.Count ?? 0
             });
         }
-        catch (Exception exception) when (
-            exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception exception)
         {
+            // 不按异常类型过滤：畸形地址（UriFormatException）或返回 HTML（JsonException）
+            // 原本会漏出这个 catch，用户看不到任何提示，界面停在「正在生成回答…」。
             var error = exception is TaskCanceledException
                 ? "请求超时，请稍后重试。"
                 : exception.Message;
