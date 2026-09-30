@@ -89,7 +89,36 @@ public partial class MainWindow : Window
         }
 
         ResetForNewRequest();
+        ShowPanelAtCursor();
 
+        if (_config.AutoFillSelectedText && !string.IsNullOrWhiteSpace(selectedText))
+        {
+            PromptBox.Text = selectedText.Trim();
+            PromptBox.CaretIndex = PromptBox.Text.Length;
+        }
+
+        FocusPromptEditor();
+    }
+
+    // 全局快捷键（双击 Ctrl）触发：面板可能本来是隐藏的，截完必须弹出来，
+    // 否则截到的图片既看不见，也没法接着提问。
+    public async Task ShowScreenshotFromHotkeyAsync()
+    {
+        if (!_config.ScreenshotHotkeyEnabled || _isCapturingScreenshot || _isRunning)
+        {
+            return;
+        }
+
+        if (!IsVisible)
+        {
+            ResetForNewRequest();
+        }
+
+        await CaptureRegionAsync(forceShow: true);
+    }
+
+    private void ShowPanelAtCursor()
+    {
         WindowState = WindowState.Normal;
         Show();
         CursorPlacementService.PlaceWindow(this);
@@ -99,14 +128,6 @@ public partial class MainWindow : Window
         Activate();
         Topmost = true;
         Topmost = _config.KeepWindowOnTop;
-
-        if (_config.AutoFillSelectedText && !string.IsNullOrWhiteSpace(selectedText))
-        {
-            PromptBox.Text = selectedText.Trim();
-            PromptBox.CaretIndex = PromptBox.Text.Length;
-        }
-
-        FocusPromptEditor();
     }
 
     public void ShowSettingsFromTray()
@@ -655,7 +676,7 @@ public partial class MainWindow : Window
             PlacementTarget = AttachmentButton
         };
 
-        var screenshotItem = new MenuItem { Header = "区域截图（Ctrl+Shift+A）" };
+        var screenshotItem = new MenuItem { Header = "区域截图（双击 Ctrl 或 Ctrl+Shift+A）" };
         screenshotItem.Click += async (_, _) => await CaptureRegionAsync();
         var fileItem = new MenuItem { Header = "选择图片" };
         fileItem.Click += (_, _) => ChooseImageFiles();
@@ -712,7 +733,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task CaptureRegionAsync()
+    private Task CaptureRegionAsync()
+    {
+        return CaptureRegionAsync(forceShow: false);
+    }
+
+    private async Task CaptureRegionAsync(bool forceShow)
     {
         if (_isCapturingScreenshot || _isRunning)
         {
@@ -722,6 +748,7 @@ public partial class MainWindow : Window
         _isCapturingScreenshot = true;
         _suppressDeactivateHide = true;
         var wasVisible = IsVisible;
+        var shouldShow = forceShow || wasVisible;
         try
         {
             Hide();
@@ -730,6 +757,11 @@ public partial class MainWindow : Window
             if (attachment is not null)
             {
                 AddAttachment(attachment);
+            }
+            else
+            {
+                // 用户取消了截图：原本隐藏的面板保持隐藏，不打扰。
+                shouldShow = wasVisible;
             }
         }
         catch (Exception exception)
@@ -740,10 +772,20 @@ public partial class MainWindow : Window
         {
             _isCapturingScreenshot = false;
             _suppressDeactivateHide = false;
-            if (wasVisible)
+            if (shouldShow)
             {
-                Show();
-                Activate();
+                if (wasVisible)
+                {
+                    // 面板本来就在：保持原位，不要跳到鼠标处打断输入。
+                    Show();
+                    Activate();
+                }
+                else
+                {
+                    // 全局快捷键唤起：跟随鼠标出现。
+                    ShowPanelAtCursor();
+                }
+
                 FocusPromptEditor();
             }
         }

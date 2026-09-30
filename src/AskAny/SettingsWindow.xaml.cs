@@ -87,6 +87,7 @@ public partial class SettingsWindow : Window
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
         HideWhenDeactivatedCheck.IsChecked = config.HideWhenDeactivated;
         AutoFillSelectionCheck.IsChecked = config.AutoFillSelectedText;
+        ScreenshotHotkeyCheck.IsChecked = config.ScreenshotHotkeyEnabled;
 
         ProviderList.ItemsSource = _providers;
         ProviderList.SelectedItem = _providers.FirstOrDefault(
@@ -156,6 +157,7 @@ public partial class SettingsWindow : Window
         _config.KeepWindowOnTop = TopMostCheck.IsChecked == true;
         _config.HideWhenDeactivated = HideWhenDeactivatedCheck.IsChecked == true;
         _config.AutoFillSelectedText = AutoFillSelectionCheck.IsChecked == true;
+        _config.ScreenshotHotkeyEnabled = ScreenshotHotkeyCheck.IsChecked == true;
 
         if (!StartupService.SetEnabled(StartWithWindowsCheck.IsChecked == true))
         {
