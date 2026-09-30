@@ -1019,7 +1019,9 @@ public partial class MainWindow : Window
 
         try
         {
-            var settings = new SettingsWindow(_configService, _config, _aiService)
+            // 传副本：设置窗口直接写传入对象，传本体的话点「取消」也会污染正在使用的配置。
+            // 保存成功后由 LoadConfigurationAsync 从磁盘重新读回。
+            var settings = new SettingsWindow(_configService, _config.Clone(), _aiService)
             {
                 Owner = this
             };
@@ -1117,8 +1119,21 @@ public partial class MainWindow : Window
         PromptRowDefinition.Height = GridLength.Auto;
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        SelectFirstFunction();
         ClearPendingAttachments();
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
+    }
+
+    // 每次唤起都把功能列表重置回第一项，避免沿用上次用过的功能被 Enter 误执行。
+    private void SelectFirstFunction()
+    {
+        if (FunctionList.Items.Count == 0)
+        {
+            return;
+        }
+
+        FunctionList.SelectedIndex = 0;
+        FunctionList.ScrollIntoView(FunctionList.SelectedItem);
     }
 
     private void RefreshFunctions()

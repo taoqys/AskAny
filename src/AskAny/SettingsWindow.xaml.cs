@@ -150,6 +150,15 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        // 开机启动项会真的写注册表，必须先做：失败时要在改动配置之前退出，
+        // 否则会留下「注册表已改、配置未存」的不一致状态。
+        var startWithWindows = StartWithWindowsCheck.IsChecked == true;
+        if (!StartupService.SetEnabled(startWithWindows))
+        {
+            SettingsStatusText.Text = "无法修改开机启动项，请检查系统权限";
+            return;
+        }
+
         _config.Providers = _providers.Select(provider => provider.Clone()).ToList();
         _config.Functions = _functions.Select(function => function.Clone()).ToList();
         _config.SelectedProviderId = _selectedProvider!.Id;
@@ -158,18 +167,22 @@ public partial class SettingsWindow : Window
         _config.HideWhenDeactivated = HideWhenDeactivatedCheck.IsChecked == true;
         _config.AutoFillSelectedText = AutoFillSelectionCheck.IsChecked == true;
         _config.ScreenshotHotkeyEnabled = ScreenshotHotkeyCheck.IsChecked == true;
+        _config.StartWithWindows = startWithWindows;
 
-        if (!StartupService.SetEnabled(StartWithWindowsCheck.IsChecked == true))
+        SaveButton.IsEnabled = false;
+        try
         {
-            SettingsStatusText.Text = "无法修改开机启动项，请检查系统权限";
+            await _configService.SaveAsync(_config);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            // 写盘失败时恢复按钮，让用户能改完再试，而不是卡在禁用状态。
+            SettingsStatusText.Text = $"保存失败：{exception.Message}";
             SaveButton.IsEnabled = true;
             return;
         }
 
-        _config.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
-
-        SaveButton.IsEnabled = false;
-        await _configService.SaveAsync(_config);
         DialogResult = true;
     }
 
@@ -250,9 +263,22 @@ public partial class SettingsWindow : Window
         }
 
         _providers.Remove(_selectedProvider);
-        ProviderList.ItemsSource = null;
-        ProviderList.ItemsSource = _providers;
-        ProviderList.SelectedIndex = 0;
+        _selectedProvider = null;
+
+        // 重建列表会触发 SelectionChanged，而那里会把表单内容写回「当前」供应商。
+        // 此刻当前供应商已被删除，必须抑制回调，否则会往已移除的对象上回写一遍表单。
+        _isLoadingProvider = true;
+        try
+        {
+            ProviderList.ItemsSource = null;
+            ProviderList.ItemsSource = _providers;
+            ProviderList.SelectedIndex = 0;
+        }
+        finally
+        {
+            _isLoadingProvider = false;
+        }
+
         _selectedProvider = ProviderList.SelectedItem as ProviderConfig;
         LoadProviderToForm(_selectedProvider);
     }
@@ -349,6 +375,15 @@ public partial class SettingsWindow : Window
             return false;
         }
 
+        // 只校验非空是不够的：地址缺协议头或拼错时，AiService 里拼出的相对地址
+        // 会在发送阶段才失败，用户看到的是运行期报错而不是这里的一句提示。
+        if (!IsSupportedBaseUri(_selectedProvider.BaseUri))
+        {
+            SettingsStatusText.Text = "接口地址需要是完整的 http:// 或 https:// 地址";
+            BaseUriBox.Focus();
+            return false;
+        }
+
         if (_selectedProvider.Models.Count == 0)
         {
             SettingsStatusText.Text = "请至少填写一个模型";
@@ -357,6 +392,12 @@ public partial class SettingsWindow : Window
         }
 
         return true;
+    }
+
+    private static bool IsSupportedBaseUri(string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     private void FunctionEditorList_SelectionChanged(

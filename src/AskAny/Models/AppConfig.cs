@@ -131,6 +131,26 @@ public sealed class AppConfig
     public string OpenAiBaseUri { get; set; } = "https://api.openai.com/v1";
     public string Model { get; set; } = "gpt-4.1-mini";
     public string OpenAiApiKeyProtected { get; set; } = string.Empty;
+
+    // 设置窗口编辑副本用：让「取消」不污染正在使用的配置对象。
+    public AppConfig Clone()
+    {
+        return new AppConfig
+        {
+            Providers = Providers.Select(provider => provider.Clone()).ToList(),
+            Functions = Functions.Select(function => function.Clone()).ToList(),
+            SelectedProviderId = SelectedProviderId,
+            TavilyApiKeyProtected = TavilyApiKeyProtected,
+            KeepWindowOnTop = KeepWindowOnTop,
+            HideWhenDeactivated = HideWhenDeactivated,
+            AutoFillSelectedText = AutoFillSelectedText,
+            StartWithWindows = StartWithWindows,
+            ScreenshotHotkeyEnabled = ScreenshotHotkeyEnabled,
+            OpenAiBaseUri = OpenAiBaseUri,
+            Model = Model,
+            OpenAiApiKeyProtected = OpenAiApiKeyProtected
+        };
+    }
 }
 
 public sealed class HistoryEntry
