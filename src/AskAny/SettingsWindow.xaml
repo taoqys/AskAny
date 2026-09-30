@@ -547,8 +547,10 @@
                                     Padding="16,14">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitle}" Text="联网搜索" />
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Tavily API Key" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Tavily API Key（新闻追踪 / 联网解释）" />
                                     <PasswordBox x:Name="TavilyKeyBox" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="知乎 Access Secret（知乎搜索）" />
+                                    <PasswordBox x:Name="ZhihuSecretBox" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

@@ -8,7 +8,9 @@ public enum WorkflowMode
     Explain,
     TrackNews,
     Think,
-    ExplainOnline
+    ExplainOnline,
+    // 追加在末尾：枚举按名称序列化，新值放最后不会影响已有配置。
+    ZhihuSearch
 }
 
 public enum ApiProtocol
@@ -121,6 +123,10 @@ public sealed class AppConfig
     public List<FunctionOption> Functions { get; set; } = [];
     public string SelectedProviderId { get; set; } = string.Empty;
     public string TavilyApiKeyProtected { get; set; } = string.Empty;
+    public string ZhihuAccessSecretProtected { get; set; } = string.Empty;
+
+    // 用于把新增的「知乎搜索」功能只补一次：补过之后用户删掉就不会再被塞回来。
+    public bool ZhihuSearchFunctionSeeded { get; set; }
     public bool KeepWindowOnTop { get; set; } = true;
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
@@ -141,6 +147,8 @@ public sealed class AppConfig
             Functions = Functions.Select(function => function.Clone()).ToList(),
             SelectedProviderId = SelectedProviderId,
             TavilyApiKeyProtected = TavilyApiKeyProtected,
+            ZhihuAccessSecretProtected = ZhihuAccessSecretProtected,
+            ZhihuSearchFunctionSeeded = ZhihuSearchFunctionSeeded,
             KeepWindowOnTop = KeepWindowOnTop,
             HideWhenDeactivated = HideWhenDeactivated,
             AutoFillSelectedText = AutoFillSelectedText,

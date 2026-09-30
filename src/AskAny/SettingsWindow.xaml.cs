@@ -29,6 +29,7 @@ public partial class SettingsWindow : Window
     // 必须记住这一点，否则保存时会把原密文覆盖成空串，静默毁掉用户的 Key。
     private readonly HashSet<string> _unreadableApiKeys = new(StringComparer.OrdinalIgnoreCase);
     private bool _tavilyKeyUnreadable;
+    private bool _zhihuSecretUnreadable;
 
     public SettingsWindow(
         ConfigService configService,
@@ -69,6 +70,7 @@ public partial class SettingsWindow : Window
             new FunctionModeOption("标准回答", WorkflowMode.Answer),
             new FunctionModeOption("解释说明", WorkflowMode.Explain),
             new FunctionModeOption("联网解释", WorkflowMode.ExplainOnline),
+            new FunctionModeOption("知乎搜索", WorkflowMode.ZhihuSearch),
             new FunctionModeOption("新闻追踪", WorkflowMode.TrackNews),
             new FunctionModeOption("深度思考", WorkflowMode.Think)
         };
@@ -80,6 +82,7 @@ public partial class SettingsWindow : Window
             new FunctionGlyphOption("新闻", "\uE909"),
             new FunctionGlyphOption("思考", "\uE735"),
             new FunctionGlyphOption("搜索", "\uE774"),
+            new FunctionGlyphOption("查找", "\uE721"),
             new FunctionGlyphOption("写作", "\uE70F"),
             new FunctionGlyphOption("代码", "\uE943"),
             new FunctionGlyphOption("灵感", "\uEA80"),
@@ -90,6 +93,9 @@ public partial class SettingsWindow : Window
         TavilyKeyBox.Password = ConfigService.Unprotect(config.TavilyApiKeyProtected);
         _tavilyKeyUnreadable = TavilyKeyBox.Password.Length == 0 &&
                                !string.IsNullOrWhiteSpace(config.TavilyApiKeyProtected);
+        ZhihuSecretBox.Password = ConfigService.Unprotect(config.ZhihuAccessSecretProtected);
+        _zhihuSecretUnreadable = ZhihuSecretBox.Password.Length == 0 &&
+                                 !string.IsNullOrWhiteSpace(config.ZhihuAccessSecretProtected);
         TopMostCheck.IsChecked = config.KeepWindowOnTop;
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
         HideWhenDeactivatedCheck.IsChecked = config.HideWhenDeactivated;
@@ -174,6 +180,11 @@ public partial class SettingsWindow : Window
         if (TavilyKeyBox.Password.Length > 0 || !_tavilyKeyUnreadable)
         {
             _config.TavilyApiKeyProtected = ConfigService.Protect(TavilyKeyBox.Password);
+        }
+
+        if (ZhihuSecretBox.Password.Length > 0 || !_zhihuSecretUnreadable)
+        {
+            _config.ZhihuAccessSecretProtected = ConfigService.Protect(ZhihuSecretBox.Password);
         }
         _config.KeepWindowOnTop = TopMostCheck.IsChecked == true;
         _config.HideWhenDeactivated = HideWhenDeactivatedCheck.IsChecked == true;

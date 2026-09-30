@@ -52,8 +52,23 @@ public static class FunctionCatalog
                 "\uE774",
                 "你是中文研究型解释助手。结合提供的联网检索资料解释问题，明确区分资料事实、推断和你的结论。",
                 0,
-                -2.5)
+                -2.5),
+            CreateZhihuSearch()
         ];
+    }
+
+    public static FunctionOption CreateZhihuSearch()
+    {
+        return Create(
+            "zhihu-search",
+            WorkflowMode.ZhihuSearch,
+            "知乎搜索",
+            "只检索知乎站内内容，再用当前模型回答",
+            "\uE721",
+            "你是中文研究型助手。基于下面提供的知乎站内检索资料回答问题，" +
+            "用 [1]、[2] 标注来源编号，并明确区分资料中的事实与你的推断；资料不足时直接说明。",
+            0,
+            -2.5);
     }
 
     public static FunctionOption CreateCustom()
@@ -81,6 +96,9 @@ public static class FunctionCatalog
                 "你是严谨的中文分析助手。给出必要的分析要点，再明确写出最终结论。不要虚构不确定信息。",
             WorkflowMode.ExplainOnline =>
                 "你是中文研究型解释助手。结合提供的联网检索资料解释问题，明确区分资料事实、推断和你的结论。",
+            WorkflowMode.ZhihuSearch =>
+                "你是中文研究型助手。基于下面提供的知乎站内检索资料回答问题，" +
+                "用 [1]、[2] 标注来源编号，并明确区分资料中的事实与你的推断；资料不足时直接说明。",
             _ => "你是一个中文 AI 助手。"
         };
     }
@@ -94,6 +112,7 @@ public static class FunctionCatalog
             WorkflowMode.TrackNews => "新闻追踪（联网）",
             WorkflowMode.Think => "深度思考（启用推理）",
             WorkflowMode.ExplainOnline => "联网解释（联网）",
+            WorkflowMode.ZhihuSearch => "知乎搜索（知乎站内检索）",
             _ => "标准回答"
         };
     }

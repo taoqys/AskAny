@@ -53,6 +53,7 @@ public sealed class ConfigService
     private static AppConfig Normalize(AppConfig config)
     {
         config.Functions = NormalizeFunctions(config.Functions);
+        config.Functions = EnsureZhihuSearchFunction(config, config.Functions);
 
         if (config.Providers.Count == 0)
         {
@@ -123,6 +124,28 @@ public sealed class ConfigService
             provider => provider.Id.Equals(config.SelectedProviderId, StringComparison.OrdinalIgnoreCase));
         config.SelectedProviderId = selected?.Id ?? config.Providers[0].Id;
         return config;
+    }
+
+    // 只把「知乎搜索」加进默认功能列表的话，配置里已有功能列表的老用户永远看不到它。
+    // 这里做一次性补齐，并用标志记住：用户之后主动删掉，就不会再被塞回来。
+    private static List<FunctionOption> EnsureZhihuSearchFunction(
+        AppConfig config,
+        List<FunctionOption> functions)
+    {
+        if (config.ZhihuSearchFunctionSeeded)
+        {
+            return functions;
+        }
+
+        config.ZhihuSearchFunctionSeeded = true;
+
+        if (functions.Any(function => function.Mode == WorkflowMode.ZhihuSearch))
+        {
+            return functions;
+        }
+
+        functions.Add(FunctionCatalog.CreateZhihuSearch());
+        return functions;
     }
 
     private static List<FunctionOption> NormalizeFunctions(List<FunctionOption>? configuredFunctions)

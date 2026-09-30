@@ -531,9 +531,12 @@ public partial class MainWindow : Window
         ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(
-            option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
-                ? "正在检索网络资料…"
-                : "正在生成回答…",
+            option.Mode switch
+            {
+                WorkflowMode.TrackNews or WorkflowMode.ExplainOnline => "正在检索网络资料…",
+                WorkflowMode.ZhihuSearch => "正在检索知乎…",
+                _ => "正在生成回答…"
+            },
             null);
         StatusText.Text = "正在执行";
 
@@ -552,6 +555,15 @@ public partial class MainWindow : Window
 
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
+            }
+            else if (option.Mode == WorkflowMode.ZhihuSearch)
+            {
+                // 只用知乎做检索，回答仍交给当前选中的模型。
+                var zhihuSecret = ConfigService.Unprotect(_config.ZhihuAccessSecretProtected);
+                search = await _searchService.SearchZhihuAsync(prompt, zhihuSecret);
+
+                ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条知乎资料，正在整理…";
+                SetOutputMarkdown("正在结合知乎资料生成回答…", null);
             }
 
             var result = await _aiService.ExecuteAsync(
