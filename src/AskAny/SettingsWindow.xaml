@@ -605,6 +605,11 @@
                                               FontSize="13"
                                               Foreground="{StaticResource InkBrush}"
                                               Content="自动填入选中文字" />
+                                    <CheckBox x:Name="ScreenshotHotkeyCheck"
+                                              Margin="0,2,0,0"
+                                              FontSize="13"
+                                              Foreground="{StaticResource InkBrush}"
+                                              Content="双击 Ctrl 区域截图（全局生效）" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

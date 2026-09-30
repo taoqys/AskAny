@@ -14,7 +14,7 @@ public partial class App : Application
 {
     private Mutex? _singleInstanceMutex;
     private HttpClient? _httpClient;
-    private GlobalDoubleShiftHook? _doubleShiftHook;
+    private GlobalDoubleTapHook? _doubleTapHook;
     private Forms.NotifyIcon? _trayIcon;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -138,9 +138,23 @@ public partial class App : Application
         mainWindow.Hide();
         CreateTrayIcon(mainWindow);
 
-        _doubleShiftHook = new GlobalDoubleShiftHook();
-        _doubleShiftHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
-        _doubleShiftHook.Install();
+        _doubleTapHook = new GlobalDoubleTapHook();
+        _doubleTapHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
+        _doubleTapHook.DoubleCtrlPressed += (_, _) => CaptureScreenshotAndShow(mainWindow);
+        _doubleTapHook.Install();
+    }
+
+    private void CaptureScreenshotAndShow(MainWindow mainWindow)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            _ = mainWindow.ShowScreenshotFromHotkeyAsync();
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Normal,
+            () => _ = mainWindow.ShowScreenshotFromHotkeyAsync());
     }
 
     private void CaptureSelectionAndShow(MainWindow mainWindow)
@@ -212,7 +226,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _doubleShiftHook?.Dispose();
+        _doubleTapHook?.Dispose();
         if (_trayIcon is not null)
         {
             _trayIcon.Visible = false;

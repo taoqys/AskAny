@@ -125,6 +125,7 @@ public sealed class AppConfig
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
     public bool StartWithWindows { get; set; }
+    public bool ScreenshotHotkeyEnabled { get; set; } = true;
 
     // Legacy fields are retained so existing installations migrate cleanly.
     public string OpenAiBaseUri { get; set; } = "https://api.openai.com/v1";
