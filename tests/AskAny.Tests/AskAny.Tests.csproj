@@ -5,7 +5,8 @@
     <!-- 被测项目是 WPF 应用，测试工程也需要 WPF 才能引用它 -->
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- 测试工程开着隐式 using：被测项目关掉了它，但测试里漏 using 只会白烧一轮 CI -->
+    <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <RootNamespace>AskAny.Tests</RootNamespace>
   </PropertyGroup>
