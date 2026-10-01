@@ -16,6 +16,7 @@ public partial class SettingsWindow : Window
 
     private readonly ConfigService _configService;
     private readonly AiService _aiService;
+    private readonly SearchService _searchService;
     private readonly AppConfig _config;
     private readonly List<ProviderConfig> _providers;
     private readonly List<FunctionOption> _functions;
@@ -34,12 +35,14 @@ public partial class SettingsWindow : Window
     public SettingsWindow(
         ConfigService configService,
         AppConfig config,
-        AiService aiService)
+        AiService aiService,
+        SearchService searchService)
     {
         InitializeComponent();
 
         _configService = configService;
         _aiService = aiService;
+        _searchService = searchService;
         _config = config;
         _providers = config.Providers.Count == 0
             ? ProviderCatalog.CreateDefaultProviders()
@@ -341,6 +344,33 @@ public partial class SettingsWindow : Window
         return FunctionCatalog.IsLegacySearchMode(function.Mode)
             ? WorkflowMode.SearchNetwork
             : function.Mode;
+    }
+
+    private async void ZhihuQuotaButton_Click(object sender, RoutedEventArgs e)
+    {
+        ZhihuQuotaButton.IsEnabled = false;
+        ZhihuQuotaText.Text = "正在查询…";
+
+        try
+        {
+            var secret = ZhihuSecretBox.Password;
+            var items = await _searchService.GetZhihuQuotaAsync(secret);
+
+            ZhihuQuotaText.Text = items.Count == 0
+                ? "该账号还没有已配置额度的知乎接口。"
+                : string.Join(
+                    "　",
+                    items.Select(item =>
+                        $"{item.ApiName} 剩余 {item.RemainingQuota}/{item.TotalQuota}（已用 {item.TotalUsed}）"));
+        }
+        catch (Exception exception)
+        {
+            ZhihuQuotaText.Text = exception.Message;
+        }
+        finally
+        {
+            ZhihuQuotaButton.IsEnabled = true;
+        }
     }
 
     private void LoadProviderToForm(ProviderConfig? provider)

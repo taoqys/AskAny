@@ -333,7 +333,9 @@ public sealed class AiService
                 input.Add(new Dictionary<string, object?>
                 {
                     ["role"] = turn.Role,
-                    ["content"] = BuildResponsesContent(turn.Content, turn.Images)
+                    // 历史轮次不再重复携带图片。图片是内联 base64，多轮追问会把同一张图
+                    // 反复按全量重发；图片只在该轮发送一次。
+                    ["content"] = turn.Content
                 });
             }
 
@@ -397,7 +399,8 @@ public sealed class AiService
             messages.Add(new Dictionary<string, object?>
             {
                 ["role"] = turn.Role,
-                ["content"] = BuildChatContent(turn.Content, turn.Images)
+                // 同上：历史轮次只带文本，图片仅在该轮发送。
+                ["content"] = turn.Content
             });
         }
 

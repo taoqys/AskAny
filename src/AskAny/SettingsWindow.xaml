@@ -561,10 +561,29 @@
                                     Padding="16,14">
                                 <StackPanel>
                                     <TextBlock Style="{StaticResource SectionTitle}" Text="联网搜索" />
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Tavily API Key（新闻追踪 / 联网解释）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="Tavily API Key（全网 / 新闻）" />
                                     <PasswordBox x:Name="TavilyKeyBox" />
-                                    <TextBlock Style="{StaticResource FieldLabel}" Text="知乎 Access Secret（知乎搜索）" />
+                                    <TextBlock Style="{StaticResource FieldLabel}" Text="知乎 Access Secret（知乎）" />
                                     <PasswordBox x:Name="ZhihuSecretBox" />
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="ZhihuQuotaButton"
+                                                Style="{StaticResource SecondaryButton}"
+                                                Padding="12,6"
+                                                Content="查询知乎额度"
+                                                ToolTip="知乎按成功调用计费，这里查询今天剩余的免费额度（不消耗额度）"
+                                                Click="ZhihuQuotaButton_Click" />
+                                        <TextBlock x:Name="ZhihuQuotaText"
+                                                   Grid.Column="1"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource MutedBrush}" />
+                                    </Grid>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

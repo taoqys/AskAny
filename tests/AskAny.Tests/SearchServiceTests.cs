@@ -181,4 +181,68 @@ public class SearchServiceTests
 
         Assert.Contains("503", exception.Message);
     }
+
+    // 知乎按成功调用计费，设置界面用这个接口显示剩余额度；它本身不消耗业务额度。
+    [Fact]
+    public async Task ZhihuQuotaIsParsed()
+    {
+        var handler = new StubHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"Code":0,"Message":"success","Data":[{"APIID":"zhihu_search","APIName":"知乎搜索","TotalQuota":500,"TotalUsed":12,"RemainingQuota":488}]}""");
+
+        var items = await Build(handler).GetZhihuQuotaAsync("secret");
+
+        var item = Assert.Single(items);
+        Assert.Equal("zhihu_search", item.ApiId);
+        Assert.Equal("知乎搜索", item.ApiName);
+        Assert.Equal(500, item.TotalQuota);
+        Assert.Equal(12, item.TotalUsed);
+        Assert.Equal(488, item.RemainingQuota);
+    }
+
+    [Fact]
+    public async Task ZhihuQuotaRequestCarriesAuthAndTimestamp()
+    {
+        var handler = new StubHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"Code":0,"Message":"success","Data":[]}""");
+
+        await Build(handler).GetZhihuQuotaAsync("secret");
+
+        Assert.Equal("Bearer", handler.LastRequestHeaders!.Authorization!.Scheme);
+        Assert.True(handler.LastRequestHeaders.Contains("X-Request-Timestamp"));
+        Assert.Contains("APIIDs=", handler.LastRequestUri!.Query);
+    }
+
+    [Fact]
+    public async Task ZhihuQuotaEmptyDataIsNotAnError()
+    {
+        var handler = new StubHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"Code":0,"Message":"success","Data":[]}""");
+
+        Assert.Empty(await Build(handler).GetZhihuQuotaAsync("secret"));
+    }
+
+    [Fact]
+    public async Task ZhihuQuotaAuthErrorIsClassified()
+    {
+        var handler = new StubHttpMessageHandler(
+            HttpStatusCode.OK,
+            """{"Code":20001,"Message":"鉴权失败","Data":null}""");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Build(handler).GetZhihuQuotaAsync("secret"));
+
+        Assert.Contains("10 分钟", exception.Message);
+    }
+
+    [Fact]
+    public async Task ZhihuQuotaNeedsSecret()
+    {
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, "{}");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Build(handler).GetZhihuQuotaAsync(string.Empty));
+    }
 }

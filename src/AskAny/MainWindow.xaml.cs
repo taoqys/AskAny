@@ -54,6 +54,10 @@ public partial class MainWindow : Window
     // 所以不能在 catch 过滤器里读它，只能提前把结论记下来。
     private bool _lastRequestCancelledByUser;
 
+    // 多轮上下文上限：约 6 轮问答，且总字数不超过 24k。
+    private const int MaxConversationTurns = 12;
+    private const int MaxConversationCharacters = 24_000;
+
     public MainWindow(
         ConfigService configService,
         AiService aiService,
@@ -656,8 +660,11 @@ public partial class MainWindow : Window
             var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
             _lastAnswer = displayAnswer;
             SetOutputMarkdown(displayAnswer, reasoning);
-            _conversation.Add(new ConversationTurn("user", prompt, images));
+            // 不把图片放进会话：历史轮次不再重发图片（见 AiService 的说明），
+            // 存着只会白占内存。
+            _conversation.Add(new ConversationTurn("user", prompt));
             _conversation.Add(new ConversationTurn("assistant", result.Answer));
+            TrimConversation();
             stopwatch.Stop();
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
             ResponseMetaText.Text =
@@ -933,6 +940,28 @@ public partial class MainWindow : Window
             reasoning.Length == 0 ? null : reasoning);
         // 生成过程中让视线跟着最新内容走；完成后 SetOutputMarkdown 会回到开头。
         OutputRichText.ScrollToEnd();
+    }
+
+    // 多轮上下文不能无限增长：token 线性上涨，迟早撞上下文上限或超时。
+    // 按轮数与总字数双重限制，并且保证裁剪后第一条是 user ——
+    // 从中间截断会让某轮 assistant 没有对应的提问，部分提供商会直接拒绝这种序列。
+    private void TrimConversation()
+    {
+        while (_conversation.Count > MaxConversationTurns)
+        {
+            _conversation.RemoveAt(0);
+        }
+
+        while (_conversation.Count > 2 &&
+               _conversation.Sum(turn => turn.Content.Length) > MaxConversationCharacters)
+        {
+            _conversation.RemoveAt(0);
+        }
+
+        while (_conversation.Count > 0 && _conversation[0].Role != "user")
+        {
+            _conversation.RemoveAt(0);
+        }
     }
 
     private void SetOutputMarkdown(string markdown, string? reasoning)
@@ -1369,7 +1398,11 @@ public partial class MainWindow : Window
         {
             // 传副本：设置窗口直接写传入对象，传本体的话点「取消」也会污染正在使用的配置。
             // 保存成功后由 LoadConfigurationAsync 从磁盘重新读回。
-            var settings = new SettingsWindow(_configService, _config.Clone(), _aiService)
+            var settings = new SettingsWindow(
+                _configService,
+                _config.Clone(),
+                _aiService,
+                _searchService)
             {
                 Owner = this
             };

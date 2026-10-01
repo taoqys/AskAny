@@ -197,6 +197,57 @@ public class AiServiceParsingTests
                 FunctionFor(WorkflowMode.Answer), "问题", provider, "key", null));
     }
 
+    // 当前这一轮附加的图片要发送。
+    [Fact]
+    public async Task CurrentPromptImagesAreSent()
+    {
+        var image = new ImageAttachment
+        {
+            Bytes = new byte[] { 1, 2, 3 },
+            MediaType = "image/png"
+        };
+
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, ChatCompletionsPayload);
+        await new AiService(new HttpClient(handler)).ExecuteAsync(
+            FunctionFor(WorkflowMode.Answer),
+            "问题",
+            ChatProvider(),
+            "key",
+            null,
+            new[] { image });
+
+        Assert.Contains("data:image/png;base64,AQID", handler.LastRequestBody);
+    }
+
+    // 回归：历史轮次不再重复携带图片，否则同一张图会在每轮追问里按全量 base64 重发。
+    [Fact]
+    public async Task ConversationTurnImagesAreNotResent()
+    {
+        var image = new ImageAttachment
+        {
+            Bytes = new byte[] { 1, 2, 3 },
+            MediaType = "image/png"
+        };
+
+        var conversation = new[]
+        {
+            new ConversationTurn("user", "上一轮问题", new[] { image }),
+            new ConversationTurn("assistant", "上一轮回答")
+        };
+
+        var handler = new StubHttpMessageHandler(HttpStatusCode.OK, ChatCompletionsPayload);
+        await new AiService(new HttpClient(handler)).ExecuteAsync(
+            FunctionFor(WorkflowMode.Answer),
+            "本轮问题",
+            ChatProvider(),
+            "key",
+            null,
+            null,
+            conversation);
+
+        Assert.DoesNotContain("data:image", handler.LastRequestBody);
+    }
+
     // 检索结果会被拼进系统提示词，并要求模型用 [1][2] 标注来源。
     // 注意：System.Text.Json 默认会把非 ASCII 转义成 \uXXXX，
     // 所以不能直接在序列化后的 body 里找中文，必须解析出来再断言。

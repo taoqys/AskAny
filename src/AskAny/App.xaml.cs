@@ -87,7 +87,11 @@ public partial class App : Application
                 Providers = [provider],
                 SelectedProviderId = provider.Id
             };
-            var settings = new SettingsWindow(configService, previewConfig, new AiService(_httpClient))
+            var settings = new SettingsWindow(
+                configService,
+                previewConfig,
+                new AiService(_httpClient),
+                new SearchService(_httpClient))
             {
                 WindowStartupLocation = WindowStartupLocation.CenterScreen
             };
