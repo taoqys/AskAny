@@ -11,14 +11,14 @@ public enum WorkflowMode
     ExplainOnline,
     // 追加在末尾：枚举按名称序列化，新值放最后不会影响已有配置。
     ZhihuSearch,
-    // 合并后的「联网检索」：具体检索哪个来源由 FunctionOption.SearchSource 决定。
+    // 合并后的「联网检索」：具体检索哪个来源由 FunctionOption.SearchBackend 决定。
     // TrackNews / ExplainOnline / ZhihuSearch 作为历史值保留，仅供老配置迁移与默认提示词回退。
     SearchNetwork
 }
 
 // 检索来源是独立于「提示词 / 推理」的一条真实行为轴：
 // 它决定走哪个检索接口、以及 Tavily 的 topic 取值。
-public enum SearchSource
+public enum SearchBackend
 {
     None,
     TavilyGeneral,
@@ -42,7 +42,7 @@ public sealed class FunctionOption
     public string SystemPrompt { get; set; } = string.Empty;
     public double IconOffsetX { get; set; }
     public double IconOffsetY { get; set; }
-    public SearchSource SearchSource { get; set; } = SearchSource.None;
+    public SearchBackend SearchBackend { get; set; } = SearchBackend.None;
 
     public FunctionOption Clone()
     {
@@ -56,7 +56,7 @@ public sealed class FunctionOption
             SystemPrompt = SystemPrompt,
             IconOffsetX = IconOffsetX,
             IconOffsetY = IconOffsetY,
-            SearchSource = SearchSource
+            SearchBackend = SearchBackend
         };
     }
 }

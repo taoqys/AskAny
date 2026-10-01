@@ -184,7 +184,7 @@ public sealed class ConfigService
             carriedPrompt: single?.SystemPrompt,
             carriedSource: single is null
                 ? null
-                : FunctionCatalog.SearchSourceForLegacyMode(single.Mode));
+                : FunctionCatalog.SearchBackendForLegacyMode(single.Mode));
     }
 
     private static bool HasDefaultPrompt(FunctionOption function)
@@ -199,7 +199,7 @@ public sealed class ConfigService
         List<FunctionOption> functions,
         List<(FunctionOption function, int index)> merged,
         string? carriedPrompt,
-        SearchSource? carriedSource)
+        SearchBackend? carriedSource)
     {
         var insertAt = merged.Min(item => item.index);
         var mergedSet = merged.Select(item => item.function).ToHashSet();
@@ -212,7 +212,7 @@ public sealed class ConfigService
 
         if (carriedSource is { } source)
         {
-            network.SearchSource = source;
+            network.SearchBackend = source;
         }
 
         var result = new List<FunctionOption>();
@@ -262,12 +262,12 @@ public sealed class ConfigService
                 ? FunctionCatalog.GetDefaultSystemPrompt(function.Mode)
                 : function.SystemPrompt.Trim();
 
-            // 老配置没有 SearchSource 字段：由历史检索模式推导，否则这些项的检索能力会静默消失。
+            // 老配置没有 SearchBackend 字段：由历史检索模式推导，否则这些项的检索能力会静默消失。
             // 「联网检索」模式不推导 —— 它的来源由用户显式选择，推导会把「不检索」覆盖掉。
-            if (function.SearchSource == SearchSource.None &&
+            if (function.SearchBackend == SearchBackend.None &&
                 FunctionCatalog.IsLegacySearchMode(function.Mode))
             {
-                function.SearchSource = FunctionCatalog.SearchSourceForLegacyMode(function.Mode);
+                function.SearchBackend = FunctionCatalog.SearchBackendForLegacyMode(function.Mode);
             }
 
             functions.Add(function);

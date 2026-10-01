@@ -72,12 +72,12 @@ public partial class SettingsWindow : Window
             new FunctionModeOption("深度思考（启用推理）", WorkflowMode.Think),
             new FunctionModeOption("联网检索", WorkflowMode.SearchNetwork)
         };
-        FunctionSearchSourceComboBox.ItemsSource =
+        FunctionSearchBackendComboBox.ItemsSource =
         new[]
         {
-            new SearchSourceOption("全网（Tavily）", SearchSource.TavilyGeneral),
-            new SearchSourceOption("新闻（Tavily，偏向主流媒体）", SearchSource.TavilyNews),
-            new SearchSourceOption("知乎站内", SearchSource.Zhihu)
+            new SearchBackendOption("全网（Tavily）", SearchBackend.TavilyGeneral),
+            new SearchBackendOption("新闻（Tavily，偏向主流媒体）", SearchBackend.TavilyNews),
+            new SearchBackendOption("知乎站内", SearchBackend.Zhihu)
         };
         FunctionGlyphComboBox.ItemsSource =
         new[]
@@ -317,21 +317,21 @@ public partial class SettingsWindow : Window
 
     private void FunctionModeComboBox_SelectionChanged(object sender, RoutedEventArgs e)
     {
-        UpdateSearchSourceAvailability();
+        UpdateSearchBackendAvailability();
     }
 
     // 「检索来源」只在「联网检索」下有意义；其余执行方式一律不检索。
-    private void UpdateSearchSourceAvailability()
+    private void UpdateSearchBackendAvailability()
     {
         var isNetwork = (FunctionModeComboBox.SelectedItem as FunctionModeOption)?.Mode
                         == WorkflowMode.SearchNetwork;
 
-        FunctionSearchSourceComboBox.IsEnabled = isNetwork;
-        SearchSourceLabel.Opacity = isNetwork ? 1d : 0.5d;
+        FunctionSearchBackendComboBox.IsEnabled = isNetwork;
+        SearchBackendLabel.Opacity = isNetwork ? 1d : 0.5d;
 
-        if (isNetwork && FunctionSearchSourceComboBox.SelectedItem is null)
+        if (isNetwork && FunctionSearchBackendComboBox.SelectedItem is null)
         {
-            FunctionSearchSourceComboBox.SelectedIndex = 0;
+            FunctionSearchBackendComboBox.SelectedIndex = 0;
         }
     }
 
@@ -602,18 +602,18 @@ public partial class SettingsWindow : Window
                 .FirstOrDefault(option => option.Mode == DisplayMode(function));
 
             // 历史检索模式（新闻追踪 / 联网解释 / 知乎搜索）在界面上统一按「联网检索」展示，
-            // 来源由其 SearchSource 决定；来源缺失时给一个可用默认值，避免下拉是空的。
-            var source = function.SearchSource;
-            if (source == SearchSource.None && DisplayMode(function) == WorkflowMode.SearchNetwork)
+            // 来源由其 SearchBackend 决定；来源缺失时给一个可用默认值，避免下拉是空的。
+            var source = function.SearchBackend;
+            if (source == SearchBackend.None && DisplayMode(function) == WorkflowMode.SearchNetwork)
             {
-                source = SearchSource.TavilyGeneral;
+                source = SearchBackend.TavilyGeneral;
             }
 
-            FunctionSearchSourceComboBox.SelectedItem =
-                ((IEnumerable<SearchSourceOption>)FunctionSearchSourceComboBox.ItemsSource)
+            FunctionSearchBackendComboBox.SelectedItem =
+                ((IEnumerable<SearchBackendOption>)FunctionSearchBackendComboBox.ItemsSource)
                 .FirstOrDefault(option => option.Source == source)
-                ?? FunctionSearchSourceComboBox.Items[0];
-            UpdateSearchSourceAvailability();
+                ?? FunctionSearchBackendComboBox.Items[0];
+            UpdateSearchBackendAvailability();
             FunctionGlyphComboBox.SelectedItem =
                 ((IEnumerable<FunctionGlyphOption>)FunctionGlyphComboBox.ItemsSource)
                 .FirstOrDefault(option => option.Glyph == function.Glyph)
@@ -639,10 +639,10 @@ public partial class SettingsWindow : Window
                     ?? _selectedFunction.Glyph;
 
         _selectedFunction.Mode = mode;
-        _selectedFunction.SearchSource = mode == WorkflowMode.SearchNetwork
-            ? (FunctionSearchSourceComboBox.SelectedItem as SearchSourceOption)?.Source
-              ?? SearchSource.TavilyGeneral
-            : SearchSource.None;
+        _selectedFunction.SearchBackend = mode == WorkflowMode.SearchNetwork
+            ? (FunctionSearchBackendComboBox.SelectedItem as SearchBackendOption)?.Source
+              ?? SearchBackend.TavilyGeneral
+            : SearchBackend.None;
         _selectedFunction.Name = string.IsNullOrWhiteSpace(FunctionNameBox.Text)
             ? FunctionCatalog.GetModeName(mode)
             : FunctionNameBox.Text.Trim();
@@ -797,7 +797,7 @@ public partial class SettingsWindow : Window
 
     private sealed record FunctionModeOption(string Name, WorkflowMode Mode);
 
-    private sealed record SearchSourceOption(string Name, SearchSource Source);
+    private sealed record SearchBackendOption(string Name, SearchBackend Source);
 
     private sealed record FunctionGlyphOption(string Name, string Glyph);
 }

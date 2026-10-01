@@ -52,7 +52,7 @@ public static class FunctionCatalog
             GetDefaultSystemPrompt(WorkflowMode.SearchNetwork),
             0,
             -2.5);
-        function.SearchSource = SearchSource.TavilyGeneral;
+        function.SearchBackend = SearchBackend.TavilyGeneral;
         return function;
     }
 
@@ -63,14 +63,14 @@ public static class FunctionCatalog
             or WorkflowMode.ZhihuSearch;
     }
 
-    public static SearchSource SearchSourceForLegacyMode(WorkflowMode mode)
+    public static SearchBackend SearchBackendForLegacyMode(WorkflowMode mode)
     {
         return mode switch
         {
-            WorkflowMode.TrackNews => SearchSource.TavilyNews,
-            WorkflowMode.ExplainOnline => SearchSource.TavilyGeneral,
-            WorkflowMode.ZhihuSearch => SearchSource.Zhihu,
-            _ => SearchSource.None
+            WorkflowMode.TrackNews => SearchBackend.TavilyNews,
+            WorkflowMode.ExplainOnline => SearchBackend.TavilyGeneral,
+            WorkflowMode.ZhihuSearch => SearchBackend.Zhihu,
+            _ => SearchBackend.None
         };
     }
 
@@ -124,13 +124,13 @@ public static class FunctionCatalog
         };
     }
 
-    public static string GetSearchSourceName(SearchSource source)
+    public static string GetSearchBackendName(SearchBackend source)
     {
         return source switch
         {
-            SearchSource.TavilyGeneral => "全网",
-            SearchSource.TavilyNews => "新闻",
-            SearchSource.Zhihu => "知乎",
+            SearchBackend.TavilyGeneral => "全网",
+            SearchBackend.TavilyNews => "新闻",
+            SearchBackend.Zhihu => "知乎",
             _ => "不检索"
         };
     }

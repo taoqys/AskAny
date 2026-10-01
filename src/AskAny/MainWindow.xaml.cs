@@ -162,13 +162,13 @@ public partial class MainWindow : Window
         {
             var source = e.SystemKey switch
             {
-                Key.D1 or Key.NumPad1 => SearchSource.TavilyGeneral,
-                Key.D2 or Key.NumPad2 => SearchSource.TavilyNews,
-                Key.D3 or Key.NumPad3 => SearchSource.Zhihu,
-                _ => SearchSource.None
+                Key.D1 or Key.NumPad1 => SearchBackend.TavilyGeneral,
+                Key.D2 or Key.NumPad2 => SearchBackend.TavilyNews,
+                Key.D3 or Key.NumPad3 => SearchBackend.Zhihu,
+                _ => SearchBackend.None
             };
 
-            if (source != SearchSource.None && TrySetSearchSource(source))
+            if (source != SearchBackend.None && TrySetSearchBackend(source))
             {
                 e.Handled = true;
                 return;
@@ -549,10 +549,10 @@ public partial class MainWindow : Window
         ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(
-            option.SearchSource switch
+            option.SearchBackend switch
             {
-                SearchSource.Zhihu => "正在检索知乎…",
-                SearchSource.None => "正在生成回答…",
+                SearchBackend.Zhihu => "正在检索知乎…",
+                SearchBackend.None => "正在生成回答…",
                 _ => "正在检索网络资料…"
             },
             null);
@@ -563,11 +563,11 @@ public partial class MainWindow : Window
 
         try
         {
-            // 检索与否完全由 SearchSource 决定，不再看 Mode：
+            // 检索与否完全由 SearchBackend 决定，不再看 Mode：
             // 「联网检索」把三个来源合并成一项后，Mode 只负责提示词与是否推理。
-            if (option.SearchSource != SearchSource.None)
+            if (option.SearchBackend != SearchBackend.None)
             {
-                search = await SearchBySourceAsync(option.SearchSource, prompt);
+                search = await SearchByBackendAsync(option.SearchBackend, prompt);
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
             }
@@ -626,9 +626,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private Task<SearchPacket> SearchBySourceAsync(SearchSource source, string prompt)
+    private Task<SearchPacket> SearchByBackendAsync(SearchBackend source, string prompt)
     {
-        if (source == SearchSource.Zhihu)
+        if (source == SearchBackend.Zhihu)
         {
             return _searchService.SearchZhihuAsync(
                 prompt,
@@ -637,14 +637,14 @@ public partial class MainWindow : Window
 
         return _searchService.SearchAsync(
             prompt,
-            source == SearchSource.TavilyNews,
+            source == SearchBackend.TavilyNews,
             ConfigService.Unprotect(_config.TavilyApiKeyProtected));
     }
 
     private static bool IsSearchFunction(FunctionOption function)
     {
         return function.Mode == WorkflowMode.SearchNetwork ||
-               function.SearchSource != SearchSource.None;
+               function.SearchBackend != SearchBackend.None;
     }
 
     // 只有选中检索类功能时才显示来源切换条；其余功能没有可切换的来源。
@@ -657,9 +657,9 @@ public partial class MainWindow : Window
         }
 
         SourceStrip.Visibility = Visibility.Visible;
-        ApplySourceChip(SourceGeneralChip, option.SearchSource == SearchSource.TavilyGeneral);
-        ApplySourceChip(SourceNewsChip, option.SearchSource == SearchSource.TavilyNews);
-        ApplySourceChip(SourceZhihuChip, option.SearchSource == SearchSource.Zhihu);
+        ApplySourceChip(SourceGeneralChip, option.SearchBackend == SearchBackend.TavilyGeneral);
+        ApplySourceChip(SourceNewsChip, option.SearchBackend == SearchBackend.TavilyNews);
+        ApplySourceChip(SourceZhihuChip, option.SearchBackend == SearchBackend.Zhihu);
     }
 
     private void ApplySourceChip(Button chip, bool isActive)
@@ -676,25 +676,25 @@ public partial class MainWindow : Window
     private void SourceChip_Click(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string tag } &&
-            Enum.TryParse<SearchSource>(tag, out var source))
+            Enum.TryParse<SearchBackend>(tag, out var source))
         {
-            TrySetSearchSource(source);
+            TrySetSearchBackend(source);
         }
     }
 
-    private bool TrySetSearchSource(SearchSource source)
+    private bool TrySetSearchBackend(SearchBackend source)
     {
         if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
         {
             return false;
         }
 
-        if (option.SearchSource == source)
+        if (option.SearchBackend == source)
         {
             return true;
         }
 
-        option.SearchSource = source;
+        option.SearchBackend = source;
         RefreshSourceStrip();
 
         // _functions 是 _config.Functions 的编辑副本，改动必须同步回配置才会持久化。

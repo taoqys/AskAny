@@ -463,10 +463,10 @@
                                                 </DataTemplate>
                                             </ComboBox.ItemTemplate>
                                         </ComboBox>
-                                        <TextBlock x:Name="SearchSourceLabel"
+                                        <TextBlock x:Name="SearchBackendLabel"
                                                    Style="{StaticResource FieldLabel}"
                                                    Text="检索来源" />
-                                        <ComboBox x:Name="FunctionSearchSourceComboBox"
+                                        <ComboBox x:Name="FunctionSearchBackendComboBox"
                                                   Height="40"
                                                   Background="White"
                                                   Style="{StaticResource ComboField}">
