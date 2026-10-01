@@ -56,8 +56,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- 显式指定 LineHeight + BlockLineHeight + Ideal 排版，与功能行图标一致：
-                     否则 Segoe MDL2 字形按自身行框排布，视觉上会偏离 24×24 盒子的中心。 -->
+                <!-- 显式指定 LineHeight + BlockLineHeight + Ideal 排版，与功能行图标一致，
+                     让字形位置可预测；否则 Segoe MDL2 按自身行框排布，实测偏高 3.5px。 -->
                 <TextBlock Width="24"
                            Height="24"
                            HorizontalAlignment="Center"
@@ -69,7 +69,13 @@
                            LineStackingStrategy="BlockLineHeight"
                            Text="&#xE721;"
                            TextAlignment="Center"
-                           TextOptions.TextFormattingMode="Ideal" />
+                           TextOptions.TextFormattingMode="Ideal">
+                    <!-- BlockLineHeight 会把字形压到行框底部（实测偏低 4.5px），
+                         按截图像素测量的结果回正。功能行图标用的是同一套偏移思路。 -->
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform Y="-4.5" />
+                    </TextBlock.RenderTransform>
+                </TextBlock>
 
                 <Grid Grid.Column="1" Margin="6,0,4,0">
                     <Border x:Name="PromptEditorBorder"
