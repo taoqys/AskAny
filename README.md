@@ -53,7 +53,7 @@ DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的
 
 配置保存在 `%APPDATA%\AskAny\config.json`，历史记录保存在 `%APPDATA%\AskAny\history.json`。密钥字段使用 Windows DPAPI 加密。
 
-选区捕获按三层依次尝试：焦点元素及其祖先、所在窗口内的 Document（浏览器把页面选区挂在这里）、最后对浏览器窗口模拟一次 `Ctrl+C` 兜底。兜底只在浏览器窗口启用，并且会用剪贴板序列号确认「确实发生了复制」——没有选区时不会把剪贴板里的旧内容填进输入框；捕获后会尽量还原原来的剪贴板内容。
+选区捕获按三层依次尝试：焦点元素及其祖先、前台窗口内的 Document（浏览器把页面内容挂在这里）、最后对浏览器窗口模拟一次 `Ctrl+C` 兜底。后两层用 `GetForegroundWindow` 定位窗口，不依赖 UI Automation 的父链遍历。兜底只在浏览器窗口启用，并且会用剪贴板序列号确认「确实发生了复制」——没有选区时不会把剪贴板里的旧内容填进输入框；捕获后会尽量还原原来的剪贴板内容。
 
 ## 键盘操作
 

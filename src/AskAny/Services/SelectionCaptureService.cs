@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Automation;
 
@@ -9,7 +10,13 @@ namespace AskAny.Services;
 // 原实现只认「焦点元素自身」支持 TextPattern，而现代 SPA（X / 知乎等）的焦点会落在
 // 内层 div 上（ControlType.Group），它并不支持 TextPattern —— 实测在 X 上向上 8 层
 // 祖先全部不支持，因此这些站点永远返回 null，从来不会自动填充。
-// 浏览器把页面选区挂在 Document 元素上，所以这里按三层依次尝试，最后用剪贴板兜底。
+//
+// 现在按三层依次尝试，最后一层是浏览器专用的剪贴板兜底：
+//   1. 焦点元素自身 → 祖先（原生控件第 0 层命中，行为与原来一致）
+//   2. 前台窗口内的 Document（浏览器把页面内容挂在这里）
+//   3. 对浏览器窗口模拟 Ctrl+C
+// 第 2、3 层都用 Win32 的 GetForegroundWindow 定位窗口，而不是靠 UIA 往上找 Window ——
+// 实测在 Chrome 里沿 UIA 父链并不总能命中 ControlType.Window，会把兜底整条堵死。
 public static class SelectionCaptureService
 {
     private const int MaxAncestorHops = 64;
@@ -22,36 +29,33 @@ public static class SelectionCaptureService
 
     public static string? TryCapture()
     {
+        // 1) 焦点元素自身 → 祖先。
         var focused = TryGetFocusedElement();
-        if (focused is null)
+        if (focused is not null)
         {
-            return null;
+            var fromAncestors = TryReadFromAncestors(focused);
+            if (!string.IsNullOrWhiteSpace(fromAncestors))
+            {
+                return fromAncestors;
+            }
         }
 
-        // 1) 焦点元素自身 → 祖先。原生控件通常第 0 层命中，行为与原来一致。
-        var fromAncestors = TryReadFromAncestors(focused);
-        if (!string.IsNullOrWhiteSpace(fromAncestors))
-        {
-            return fromAncestors;
-        }
+        var foreground = GetForegroundWindow();
 
-        // 搜索范围限定在焦点元素所在的顶层窗口内：往上走到桌面会把所有窗口都扫一遍。
-        var window = TryGetTopLevelWindow(focused);
-        if (window is null)
+        // 2) 前台窗口内的 Document。
+        var window = TryGetElementFromHandle(foreground);
+        if (window is not null)
         {
-            return null;
-        }
-
-        // 2) 该窗口内的 Document —— 浏览器把页面选区挂在这里。
-        var fromDocuments = TryReadFromDocuments(window);
-        if (!string.IsNullOrWhiteSpace(fromDocuments))
-        {
-            return fromDocuments;
+            var fromDocuments = TryReadFromDocuments(window);
+            if (!string.IsNullOrWhiteSpace(fromDocuments))
+            {
+                return fromDocuments;
+            }
         }
 
         // 3) 兜底：模拟 Ctrl+C。只对浏览器类窗口启用 —— Excel 这类程序在没有选区时
         //    按 Ctrl+C 也会复制当前单元格，会把无关内容填进输入框。
-        return IsBrowserWindow(window) ? TryReadFromClipboard() : null;
+        return IsBrowserWindow(foreground) ? TryReadFromClipboard() : null;
     }
 
     private static AutomationElement? TryGetFocusedElement()
@@ -65,6 +69,31 @@ public static class SelectionCaptureService
             return null;
         }
         catch (InvalidOperationException)
+        {
+            return null;
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
+    private static AutomationElement? TryGetElementFromHandle(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        try
+        {
+            return AutomationElement.FromHandle(handle);
+        }
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
         {
             return null;
         }
@@ -98,41 +127,6 @@ public static class SelectionCaptureService
         }
 
         return null;
-    }
-
-    // 取桌面之下最外层的 Window：再往上就是桌面根节点，扫它等于扫整个桌面。
-    private static AutomationElement? TryGetTopLevelWindow(AutomationElement start)
-    {
-        var walker = TreeWalker.ControlViewWalker;
-        var node = start;
-        AutomationElement? window = null;
-
-        for (var hop = 0; hop <= MaxAncestorHops && node is not null; hop++)
-        {
-            if (node.Current.ControlType == ControlType.Window)
-            {
-                window = node;
-            }
-
-            AutomationElement? parent;
-            try
-            {
-                parent = walker.GetParent(node);
-            }
-            catch (ElementNotAvailableException)
-            {
-                break;
-            }
-
-            if (parent is null || parent == AutomationElement.RootElement)
-            {
-                break;
-            }
-
-            node = parent;
-        }
-
-        return window;
     }
 
     private static string? TryReadFromDocuments(AutomationElement window)
@@ -204,15 +198,26 @@ public static class SelectionCaptureService
         }
     }
 
-    private static bool IsBrowserWindow(AutomationElement window)
+    private static bool IsBrowserWindow(IntPtr handle)
     {
+        if (handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
         try
         {
-            var className = window.Current.ClassName ?? string.Empty;
+            var buffer = new StringBuilder(256);
+            if (GetClassName(handle, buffer, buffer.Capacity) == 0)
+            {
+                return false;
+            }
+
+            var className = buffer.ToString();
             return className.StartsWith("Chrome_WidgetWin", StringComparison.OrdinalIgnoreCase) ||
                    className.Equals("MozillaWindowClass", StringComparison.OrdinalIgnoreCase);
         }
-        catch (ElementNotAvailableException)
+        catch (COMException)
         {
             return false;
         }
@@ -298,6 +303,12 @@ public static class SelectionCaptureService
         keybd_event(VkC, 0, KeyEventKeyUp, 0);
         keybd_event(VkControl, 0, KeyEventKeyUp, 0);
     }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr windowHandle, StringBuilder className, int maxCount);
 
     [DllImport("user32.dll")]
     private static extern uint GetClipboardSequenceNumber();
