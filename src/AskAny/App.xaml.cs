@@ -134,6 +134,15 @@ public partial class App : Application
             new SearchService(_httpClient),
             historyService);
 
+        // --screenshot <输出> [功能索引]：可选指定选中哪一项，
+        // 用于截到来源切换条这类「只在特定选中项下出现」的界面。
+        if (isScreenshot &&
+            e.Args.Length >= 3 &&
+            int.TryParse(e.Args[2], out var previewFunctionIndex))
+        {
+            mainWindow.PreviewFunctionIndex = previewFunctionIndex;
+        }
+
         mainWindow.Show();
         mainWindow.UpdateLayout();
 

@@ -147,6 +147,23 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
+    // 截图预览用（与 SettingsWindow.PreviewTabIndex 同一思路）：让 CI 能截到
+    // 选中「联网检索」时的界面，否则来源切换条永远没机会出现在截图里。
+    public int PreviewFunctionIndex
+    {
+        set
+        {
+            if (_functions.Count == 0)
+            {
+                return;
+            }
+
+            FunctionList.SelectedIndex = Math.Clamp(value, 0, _functions.Count - 1);
+            FunctionList.ScrollIntoView(FunctionList.SelectedItem);
+            RefreshSourceStrip();
+        }
+    }
+
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
