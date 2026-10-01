@@ -211,16 +211,16 @@ public partial class App : Application
 
     private void CaptureSelectionAndShow(MainWindow mainWindow)
     {
-        var selectedText = SelectionCaptureService.TryCapture();
-        if (Dispatcher.CheckAccess())
-        {
-            mainWindow.ShowFromHotkey(selectedText);
-            return;
-        }
-
+        // 必须把捕获放到钩子回调之外执行：UI Automation 查询在浏览器上可能耗时数百毫秒，
+        // 而低级键盘钩子回调有超时限制，超时会被系统直接摘掉钩子（表现为双击 Shift 失效）。
+        // 排到 Dispatcher 队列后钩子立刻返回；捕获仍在 Show 之前完成，浏览器此刻仍有焦点。
         Dispatcher.BeginInvoke(
             DispatcherPriority.Normal,
-            () => mainWindow.ShowFromHotkey(selectedText));
+            () =>
+            {
+                var selectedText = SelectionCaptureService.TryCapture();
+                mainWindow.ShowFromHotkey(selectedText);
+            });
     }
 
     private void CreateTrayIcon(MainWindow mainWindow)
