@@ -70,10 +70,11 @@
                            Text="&#xE721;"
                            TextAlignment="Center"
                            TextOptions.TextFormattingMode="Ideal">
-                    <!-- BlockLineHeight 会把字形压到行框底部（实测偏低 4.5px），
-                         按截图像素测量的结果回正。功能行图标用的是同一套偏移思路。 -->
+                    <!-- BlockLineHeight 会把字形压到行框底部，按截图像素测量回正。
+                         取整数 -5 而不是 -4.5：既正好落在单元格中心，又避免半像素偏移带来的模糊。
+                         功能行图标用的是同一套偏移思路。 -->
                     <TextBlock.RenderTransform>
-                        <TranslateTransform Y="-4.5" />
+                        <TranslateTransform Y="-5" />
                     </TextBlock.RenderTransform>
                 </TextBlock>
 
