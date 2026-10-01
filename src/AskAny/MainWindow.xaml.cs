@@ -39,6 +39,21 @@ public partial class MainWindow : Window
     private bool _isCapturingScreenshot;
     private string _lastAnswer = string.Empty;
 
+    // 流式渲染：读流在线程池上跑，只往缓冲区追加；界面按固定间隔统一重排。
+    private readonly object _streamGate = new();
+    private readonly StringBuilder _streamingContent = new();
+    private readonly StringBuilder _streamingReasoning = new();
+    private DispatcherTimer _streamRenderTimer = null!;
+    private bool _streamDirty;
+
+    // 当前进行中请求的取消源：Esc 用它中断。
+    private CancellationTokenSource? _requestCancellation;
+
+    // 用户取消与「请求超时」都是 OperationCanceledException，必须区分。
+    // 注意：内层 finally 会在异常继续上抛之前把 _requestCancellation 置空，
+    // 所以不能在 catch 过滤器里读它，只能提前把结论记下来。
+    private bool _lastRequestCancelledByUser;
+
     public MainWindow(
         ConfigService configService,
         AiService aiService,
@@ -57,6 +72,12 @@ public partial class MainWindow : Window
         AttachmentItems.ItemsSource = _pendingAttachments;
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+
+        _streamRenderTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(120)
+        };
+        _streamRenderTimer.Tick += (_, _) => RenderStreamingDraft();
     }
 
     // 截图预览要等初次加载完成再渲染，否则截到的是「加载前」状态。
@@ -186,7 +207,18 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            Hide();
+            // 请求进行中按 Esc = 取消请求（而不是把窗口藏起来、让请求继续跑并继续计费）。
+            // 空闲时仍然是隐藏窗口，保持原有习惯。
+            if (_isRunning && _requestCancellation is { } cancellation)
+            {
+                StatusText.Text = "正在取消…";
+                cancellation.Cancel();
+            }
+            else
+            {
+                Hide();
+            }
+
             e.Handled = true;
             return;
         }
@@ -587,6 +619,7 @@ public partial class MainWindow : Window
         IReadOnlyList<ImageAttachment> images)
     {
         _isRunning = true;
+        _lastRequestCancelledByUser = false;
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
@@ -617,14 +650,7 @@ public partial class MainWindow : Window
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
             }
 
-            var result = await _aiService.ExecuteAsync(
-                option,
-                prompt,
-                provider,
-                ConfigService.Unprotect(provider.ApiKeyProtected),
-                search,
-                images,
-                _conversation.ToArray());
+            var result = await ExecuteWithStreamingAsync(option, prompt, provider, search, images);
 
             var displayAnswer = AppendSources(result.Answer, search);
             var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
@@ -651,6 +677,13 @@ public partial class MainWindow : Window
                 ImageCount = images.Count,
                 SourceCount = search?.Sources.Count ?? 0
             });
+        }
+        catch (OperationCanceledException) when (_lastRequestCancelledByUser)
+        {
+            _lastAnswer = "已取消";
+            SetOutputMarkdown("## 已取消\n\n请求已取消。", null);
+            ResponseMetaText.Text = "已取消";
+            StatusText.Text = "已取消";
         }
         catch (Exception exception)
         {
@@ -778,6 +811,128 @@ public partial class MainWindow : Window
             () => _configService.SaveAsync(_config),
             "保存配置",
             message => StatusText.Text = message);
+    }
+
+    // 流式：读流放在线程池上，分片只往缓冲区里追加；渲染交给定时器节流。
+    // 每个分片都重排一次 Markdown 会把界面拖垮，所以按固定间隔统一渲染。
+    private async Task<AiResult> ExecuteWithStreamingAsync(
+        FunctionOption option,
+        string prompt,
+        ProviderConfig provider,
+        SearchPacket? search,
+        IReadOnlyList<ImageAttachment> images)
+    {
+        var apiKey = ConfigService.Unprotect(provider.ApiKeyProtected);
+        var conversation = _conversation.ToArray();
+
+        using var cancellation = new CancellationTokenSource();
+        _requestCancellation = cancellation;
+
+        lock (_streamGate)
+        {
+            _streamingContent.Clear();
+            _streamingReasoning.Clear();
+            _streamDirty = false;
+        }
+
+        StartStreamTimer();
+
+        try
+        {
+            return await Task.Run(() => _aiService.ExecuteStreamingAsync(
+                option,
+                prompt,
+                provider,
+                apiKey,
+                search,
+                images,
+                conversation,
+                OnStreamDelta,
+                cancellation.Token));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // 不同提供商/代理对 SSE 的支持程度不一致，流式失败必须退回非流式，
+            // 否则「支持流式」本身会变成新的失败点。
+            ErrorLog.Write("流式请求失败，回退到非流式", exception);
+
+            lock (_streamGate)
+            {
+                _streamingContent.Clear();
+                _streamingReasoning.Clear();
+                _streamDirty = false;
+            }
+
+            return await _aiService.ExecuteAsync(
+                option,
+                prompt,
+                provider,
+                apiKey,
+                search,
+                images,
+                conversation,
+                cancellation.Token);
+        }
+        finally
+        {
+            StopStreamTimer();
+            _lastRequestCancelledByUser = cancellation.IsCancellationRequested;
+            _requestCancellation = null;
+        }
+    }
+
+    // 此方法在线程池线程上被调用，只做追加，不碰任何界面对象。
+    private void OnStreamDelta(string content, string reasoning)
+    {
+        lock (_streamGate)
+        {
+            if (content.Length > 0)
+            {
+                _streamingContent.Append(content);
+            }
+
+            if (reasoning.Length > 0)
+            {
+                _streamingReasoning.Append(reasoning);
+            }
+
+            _streamDirty = true;
+        }
+    }
+
+    private void StartStreamTimer()
+    {
+        _streamRenderTimer.Start();
+    }
+
+    private void StopStreamTimer()
+    {
+        _streamRenderTimer.Stop();
+    }
+
+    private void RenderStreamingDraft()
+    {
+        string content;
+        string reasoning;
+
+        lock (_streamGate)
+        {
+            if (!_streamDirty)
+            {
+                return;
+            }
+
+            _streamDirty = false;
+            content = _streamingContent.ToString();
+            reasoning = _streamingReasoning.ToString();
+        }
+
+        ResponseMetaText.Text = $"正在生成… {content.Length} 字";
+        SetOutputMarkdown(
+            content.Length == 0 ? "正在生成回答…" : content,
+            reasoning.Length == 0 ? null : reasoning);
+        // 生成过程中让视线跟着最新内容走；完成后 SetOutputMarkdown 会回到开头。
+        OutputRichText.ScrollToEnd();
     }
 
     private void SetOutputMarkdown(string markdown, string? reasoning)

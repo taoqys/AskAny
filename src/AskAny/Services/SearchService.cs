@@ -21,6 +21,10 @@ public sealed class SearchService
 
     // 官方文档：Count 默认 10，最大 10，超出会被服务端截断。
     private const int ZhihuMaxResults = 10;
+
+    // HttpClient 的 Timeout 已被 AiService 要求设为无限（否则会掐断流式回答），
+    // 所以检索这边必须自己设一个上限，避免卡住整条请求链。
+    private static readonly TimeSpan SearchTimeout = TimeSpan.FromSeconds(30);
     private readonly HttpClient _httpClient;
 
     public SearchService(HttpClient httpClient)
@@ -70,7 +74,10 @@ public sealed class SearchService
             Encoding.UTF8,
             "application/json");
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SearchTimeout);
+
+        using var response = await _httpClient.SendAsync(request, timeout.Token);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -112,7 +119,10 @@ public sealed class SearchService
             "X-Request-Timestamp",
             DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SearchTimeout);
+
+        using var response = await _httpClient.SendAsync(request, timeout.Token);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)

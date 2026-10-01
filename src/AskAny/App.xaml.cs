@@ -70,9 +70,11 @@ public partial class App : Application
             return;
         }
 
+        // 超时改由各服务按请求类型分别控制：HttpClient 的 Timeout 覆盖整个响应读取过程，
+        // 流式长答案会被它在中途掐断。
         _httpClient = new HttpClient
         {
-            Timeout = TimeSpan.FromSeconds(120)
+            Timeout = Timeout.InfiniteTimeSpan
         };
 
         var configService = new ConfigService();
