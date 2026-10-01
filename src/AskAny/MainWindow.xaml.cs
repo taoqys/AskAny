@@ -77,7 +77,6 @@ public partial class MainWindow : Window
         RefreshModelChoices();
 
         Topmost = _config.KeepWindowOnTop;
-        UpdatePinButton();
     }
 
     public void ShowFromHotkey(string? selectedText = null)
@@ -1086,11 +1085,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HideButton_Click(object sender, RoutedEventArgs e)
-    {
-        Hide();
-    }
-
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
         ShowWorkflowList();
@@ -1243,23 +1237,18 @@ public partial class MainWindow : Window
         return (cleaned.Length > 40 ? cleaned[..40] : cleaned) + ".md";
     }
 
-    private async void PinButton_Click(object sender, RoutedEventArgs e)
+    // 1A：整行单击直接执行。此前行尾的 ▶ 只是装饰 TextBlock，点行只选中、不执行，
+    // 视觉承诺和实际行为对不上；现在整行就是执行入口，▶ 改为悬停时淡入提示。
+    private void FunctionItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        _config.KeepWindowOnTop = !_config.KeepWindowOnTop;
-        Topmost = _config.KeepWindowOnTop;
-        UpdatePinButton();
-        await _configService.SaveAsync(_config);
-    }
+        if (sender is not ListBoxItem item || item.DataContext is not FunctionOption)
+        {
+            return;
+        }
 
-    private void ExitButton_Click(object sender, RoutedEventArgs e)
-    {
-        RequestExit();
-    }
-
-    private void UpdatePinButton()
-    {
-        PinGlyph.Text = _config.KeepWindowOnTop ? "\uE77A" : "\uE77B";
-        PinButton.ToolTip = _config.KeepWindowOnTop ? "取消窗口置顶" : "固定窗口置顶";
+        e.Handled = true;
+        FunctionList.SelectedItem = item.DataContext;
+        _ = ExecuteSelectedAsync();
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)

@@ -56,6 +56,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <!-- 显式指定 LineHeight + BlockLineHeight + Ideal 排版，与功能行图标一致：
+                     否则 Segoe MDL2 字形按自身行框排布，视觉上会偏离 24×24 盒子的中心。 -->
                 <TextBlock Width="24"
                            Height="24"
                            HorizontalAlignment="Center"
@@ -63,8 +65,11 @@
                            FontFamily="Segoe MDL2 Assets"
                            FontSize="16"
                            Foreground="#6E737C"
+                           LineHeight="24"
+                           LineStackingStrategy="BlockLineHeight"
                            Text="&#xE721;"
-                           TextAlignment="Center" />
+                           TextAlignment="Center"
+                           TextOptions.TextFormattingMode="Ideal" />
 
                 <Grid Grid.Column="1" Margin="6,0,4,0">
                     <Border x:Name="PromptEditorBorder"
@@ -118,20 +123,6 @@
                         <TextBlock FontFamily="Segoe MDL2 Assets"
                                    FontSize="16"
                                    Text="&#xE8B9;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            ToolTip="设置（F1）"
-                            Click="SettingsButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="16"
-                                   Text="&#xE713;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            ToolTip="隐藏窗口（Esc）"
-                            Click="HideButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="15"
-                                   Text="&#xE711;" />
                     </Button>
                 </StackPanel>
 
@@ -208,6 +199,9 @@
                         <Style TargetType="ListBoxItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="Focusable" Value="False" />
+                            <!-- 1A：整行单击直接执行，兑现行尾 ▶ 的视觉承诺。 -->
+                            <EventSetter Event="MouseLeftButtonUp"
+                                         Handler="FunctionItem_MouseLeftButtonUp" />
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
@@ -275,14 +269,24 @@
                                            FontWeight="SemiBold"
                                            Foreground="{StaticResource InkBrush}"
                                            Text="{Binding Name}" />
-                                <TextBlock Grid.Column="2"
+                                <TextBlock x:Name="RowRunHint"
+                                           Grid.Column="2"
                                            Margin="8,0,4,0"
                                            VerticalAlignment="Center"
                                            FontFamily="Segoe MDL2 Assets"
                                            FontSize="13"
                                            Foreground="#A4A5AA"
+                                           Opacity="0"
                                            Text="&#xE724;" />
                             </Grid>
+                            <DataTemplate.Triggers>
+                                <!-- 箭头只在鼠标悬停时淡入：静态时 6 行都挂一个箭头是纯噪点，
+                                     而它现在是真的"点这里就执行"，悬停出现才有意义。 -->
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                             Value="True">
+                                    <Setter TargetName="RowRunHint" Property="Opacity" Value="1" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -404,7 +408,6 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal"
@@ -462,26 +465,14 @@
                                Text="&#xE81C;" />
                 </Button>
 
-                <Button x:Name="PinButton"
-                        Grid.Column="4"
+                <Button Grid.Column="4"
                         Style="{StaticResource IconButton}"
-                        ToolTip="取消窗口置顶"
-                        Click="PinButton_Click">
-                    <TextBlock x:Name="PinGlyph"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontFamily="Segoe MDL2 Assets"
-                               FontSize="16"
-                               Text="&#xE77A;" />
-                </Button>
-
-                <Button Grid.Column="5"
-                        Style="{StaticResource IconButton}"
-                        ToolTip="退出 AskAny"
-                        Click="ExitButton_Click">
+                        AutomationProperties.AutomationId="SettingsButton"
+                        ToolTip="设置（F1）"
+                        Click="SettingsButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
-                               FontSize="14"
-                               Text="&#xE7E8;" />
+                               FontSize="16"
+                               Text="&#xE713;" />
                 </Button>
             </Grid>
         </Grid>
