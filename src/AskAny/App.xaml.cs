@@ -170,7 +170,11 @@ public partial class App : Application
             return;
         }
 
-        var normalized = new ConfigService(inputPath).LoadAsync().GetAwaiter().GetResult();
+        // 必须放到线程池上执行：LoadAsync 的 await 会捕获 WPF 的同步上下文，
+        // 直接在 UI 线程上 .GetResult() 阻塞等待会死锁（续体永远回不到被阻塞的线程）。
+        var normalized = Task.Run(() => new ConfigService(inputPath).LoadAsync())
+            .GetAwaiter()
+            .GetResult();
         var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
         if (!string.IsNullOrEmpty(directory))
         {
