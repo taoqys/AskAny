@@ -77,7 +77,10 @@ DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的
 ```powershell
 dotnet restore AskAny.sln
 dotnet build AskAny.sln -c Release
+dotnet test AskAny.sln -c Release
 dotnet publish src/AskAny/AskAny.csproj -c Release -r win-x64 --self-contained false
 ```
 
-GitHub Actions 会在 Windows 上完成还原、构建和发布打包。
+GitHub Actions 会在 Windows 上完成还原、构建、测试和发布打包。
+
+测试覆盖不需要启动界面的纯逻辑：配置迁移（三步迁移各自的分支与幂等性）、默认功能集、`AppConfig.Clone` 的深拷贝语义、两种协议的响应解析与请求构造、Tavily / 知乎检索的信封解析与错误码。服务类通过注入假的 `HttpMessageHandler` 驱动真实的请求构造与解析代码，不需要网络和真实密钥。

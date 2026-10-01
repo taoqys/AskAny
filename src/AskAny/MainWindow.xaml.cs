@@ -59,9 +59,27 @@ public partial class MainWindow : Window
         Closing += MainWindow_Closing;
     }
 
+    // 截图预览要等初次加载完成再渲染，否则截到的是「加载前」状态。
+    private readonly TaskCompletionSource _initialLoadCompletion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task InitialLoadCompleted => _initialLoadCompletion.Task;
+
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        await LoadConfigurationAsync();
+        try
+        {
+            await LoadConfigurationAsync();
+        }
+        catch (Exception exception)
+        {
+            // 配置读取失败不该弹模态框挡住界面，记日志即可。
+            ErrorLog.Write("加载配置", exception);
+        }
+        finally
+        {
+            _initialLoadCompletion.TrySetResult();
+        }
     }
 
     private async Task LoadConfigurationAsync()

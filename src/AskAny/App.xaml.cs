@@ -162,8 +162,12 @@ public partial class App : Application
 
         if (isScreenshot)
         {
-            SaveScreenshot(mainWindow, e.Args[1]);
-            Shutdown();
+            // 不能在这里阻塞等待初次加载：LoadConfigurationAsync 的 await 需要回到 UI 线程，
+            // 阻塞 UI 线程会直接死锁（--dump-config 栽过同一个坑）。
+            // 改为异步等待、截完自行关闭（ShutdownMode 是 OnExplicitShutdown）。
+            SafeTask.Run(
+                () => SaveScreenshotAfterLoadAsync(mainWindow, e.Args[1]),
+                "截图预览");
             return;
         }
 
@@ -174,6 +178,24 @@ public partial class App : Application
         _doubleTapHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
         _doubleTapHook.DoubleCtrlPressed += (_, _) => CaptureScreenshotAndShow(mainWindow);
         _doubleTapHook.Install();
+    }
+
+    // 有配置文件时 LoadConfigurationAsync 是真正异步的。原来 Show() 之后立刻截图，
+    // 截到的是「加载前」状态（模型下拉还是空的），CI 预览会误导人。
+    private async Task SaveScreenshotAfterLoadAsync(MainWindow mainWindow, string outputPath)
+    {
+        try
+        {
+            await mainWindow.InitialLoadCompleted.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (TimeoutException)
+        {
+            ErrorLog.Write("截图预览：等待初次加载超时");
+        }
+
+        mainWindow.UpdateLayout();
+        SaveScreenshot(mainWindow, outputPath);
+        Shutdown();
     }
 
     // 用法：AskAny.exe --dump-config <输入配置> <输出 json>

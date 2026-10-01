@@ -29,6 +29,9 @@ jobs:
       - name: Build
         run: dotnet build AskAny.sln --configuration Release --no-restore
 
+      - name: Test
+        run: dotnet test AskAny.sln --configuration Release --no-build --verbosity normal
+
       - name: Publish
         run: dotnet publish src/AskAny/AskAny.csproj --configuration Release --runtime win-x64 --self-contained false --output artifacts/AskAny
 
