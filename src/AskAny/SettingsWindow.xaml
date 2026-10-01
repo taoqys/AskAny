@@ -455,6 +455,20 @@
                                         <ComboBox x:Name="FunctionModeComboBox"
                                                   Height="40"
                                                   Background="White"
+                                                  Style="{StaticResource ComboField}"
+                                                  SelectionChanged="FunctionModeComboBox_SelectionChanged">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <TextBlock x:Name="SearchSourceLabel"
+                                                   Style="{StaticResource FieldLabel}"
+                                                   Text="检索来源" />
+                                        <ComboBox x:Name="FunctionSearchSourceComboBox"
+                                                  Height="40"
+                                                  Background="White"
                                                   Style="{StaticResource ComboField}">
                                             <ComboBox.ItemTemplate>
                                                 <DataTemplate>
@@ -465,7 +479,7 @@
                                         <TextBlock Margin="0,8,0,0"
                                                    FontSize="11.5"
                                                    Foreground="{StaticResource MutedBrush}"
-                                                   Text="联网与思考由执行方式决定，不会在其他选项中启用。" />
+                                                   Text="「联网检索」的检索来源可在此指定，也可在主面板用 Alt+1/2/3 快速切换；推理只在「深度思考」启用。" />
                                     </StackPanel>
                                 </Border>
 

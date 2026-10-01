@@ -156,6 +156,25 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Alt+1/2/3 切换「联网检索」的来源。按着 Alt 时 WPF 把按键放在 SystemKey 上、
+        // 而 Key 只会是 Key.System，所以这里必须读 SystemKey，否则永远匹配不上。
+        if (e.Key == Key.System && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        {
+            var source = e.SystemKey switch
+            {
+                Key.D1 or Key.NumPad1 => SearchSource.TavilyGeneral,
+                Key.D2 or Key.NumPad2 => SearchSource.TavilyNews,
+                Key.D3 or Key.NumPad3 => SearchSource.Zhihu,
+                _ => SearchSource.None
+            };
+
+            if (source != SearchSource.None && TrySetSearchSource(source))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (e.Key == Key.V &&
             Keyboard.Modifiers.HasFlag(ModifierKeys.Control) &&
             PromptEditorBorder.Visibility == Visibility.Visible)
@@ -530,11 +549,11 @@ public partial class MainWindow : Window
         ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(
-            option.Mode switch
+            option.SearchSource switch
             {
-                WorkflowMode.TrackNews or WorkflowMode.ExplainOnline => "正在检索网络资料…",
-                WorkflowMode.ZhihuSearch => "正在检索知乎…",
-                _ => "正在生成回答…"
+                SearchSource.Zhihu => "正在检索知乎…",
+                SearchSource.None => "正在生成回答…",
+                _ => "正在检索网络资料…"
             },
             null);
         StatusText.Text = "正在执行";
@@ -544,25 +563,13 @@ public partial class MainWindow : Window
 
         try
         {
-            if (option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline)
+            // 检索与否完全由 SearchSource 决定，不再看 Mode：
+            // 「联网检索」把三个来源合并成一项后，Mode 只负责提示词与是否推理。
+            if (option.SearchSource != SearchSource.None)
             {
-                var tavilyKey = ConfigService.Unprotect(_config.TavilyApiKeyProtected);
-                search = await _searchService.SearchAsync(
-                    prompt,
-                    option.Mode == WorkflowMode.TrackNews,
-                    tavilyKey);
-
+                search = await SearchBySourceAsync(option.SearchSource, prompt);
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
-            }
-            else if (option.Mode == WorkflowMode.ZhihuSearch)
-            {
-                // 只用知乎做检索，回答仍交给当前选中的模型。
-                var zhihuSecret = ConfigService.Unprotect(_config.ZhihuAccessSecretProtected);
-                search = await _searchService.SearchZhihuAsync(prompt, zhihuSecret);
-
-                ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条知乎资料，正在整理…";
-                SetOutputMarkdown("正在结合知乎资料生成回答…", null);
             }
 
             var result = await _aiService.ExecuteAsync(
@@ -617,6 +624,83 @@ public partial class MainWindow : Window
             BusyProgress.Visibility = Visibility.Collapsed;
             _isRunning = false;
         }
+    }
+
+    private Task<SearchPacket> SearchBySourceAsync(SearchSource source, string prompt)
+    {
+        if (source == SearchSource.Zhihu)
+        {
+            return _searchService.SearchZhihuAsync(
+                prompt,
+                ConfigService.Unprotect(_config.ZhihuAccessSecretProtected));
+        }
+
+        return _searchService.SearchAsync(
+            prompt,
+            source == SearchSource.TavilyNews,
+            ConfigService.Unprotect(_config.TavilyApiKeyProtected));
+    }
+
+    private static bool IsSearchFunction(FunctionOption function)
+    {
+        return function.Mode == WorkflowMode.SearchNetwork ||
+               function.SearchSource != SearchSource.None;
+    }
+
+    // 只有选中检索类功能时才显示来源切换条；其余功能没有可切换的来源。
+    private void RefreshSourceStrip()
+    {
+        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        {
+            SourceStrip.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SourceStrip.Visibility = Visibility.Visible;
+        ApplySourceChip(SourceGeneralChip, option.SearchSource == SearchSource.TavilyGeneral);
+        ApplySourceChip(SourceNewsChip, option.SearchSource == SearchSource.TavilyNews);
+        ApplySourceChip(SourceZhihuChip, option.SearchSource == SearchSource.Zhihu);
+    }
+
+    private void ApplySourceChip(Button chip, bool isActive)
+    {
+        chip.Background = isActive
+            ? (Brush)FindResource("AccentSoftBrush")
+            : Brushes.Transparent;
+        chip.Foreground = isActive
+            ? (Brush)FindResource("AccentBrush")
+            : (Brush)FindResource("MutedBrush");
+        chip.FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal;
+    }
+
+    private void SourceChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag } &&
+            Enum.TryParse<SearchSource>(tag, out var source))
+        {
+            TrySetSearchSource(source);
+        }
+    }
+
+    private bool TrySetSearchSource(SearchSource source)
+    {
+        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        {
+            return false;
+        }
+
+        if (option.SearchSource == source)
+        {
+            return true;
+        }
+
+        option.SearchSource = source;
+        RefreshSourceStrip();
+
+        // _functions 是 _config.Functions 的编辑副本，改动必须同步回配置才会持久化。
+        _config.Functions = _functions.Select(function => function.Clone()).ToList();
+        _ = _configService.SaveAsync(_config);
+        return true;
     }
 
     private void SetOutputMarkdown(string markdown, string? reasoning)
@@ -924,6 +1008,8 @@ public partial class MainWindow : Window
         {
             StatusText.Text = $"已选择：{option.Name}，Enter 执行";
         }
+
+        RefreshSourceStrip();
     }
 
     private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1127,6 +1213,7 @@ public partial class MainWindow : Window
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
         SelectFirstFunction();
+        RefreshSourceStrip();
         ClearPendingAttachments();
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
     }
@@ -1155,6 +1242,7 @@ public partial class MainWindow : Window
         FunctionList.SelectedItem = _functions.FirstOrDefault(
                                         function => function.Id == selectedId)
                                     ?? _functions.FirstOrDefault();
+        RefreshSourceStrip();
     }
 
     private void SetResponsePromptDisplay(string prompt, int imageCount)

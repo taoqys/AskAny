@@ -10,7 +10,20 @@ public enum WorkflowMode
     Think,
     ExplainOnline,
     // 追加在末尾：枚举按名称序列化，新值放最后不会影响已有配置。
-    ZhihuSearch
+    ZhihuSearch,
+    // 合并后的「联网检索」：具体检索哪个来源由 FunctionOption.SearchSource 决定。
+    // TrackNews / ExplainOnline / ZhihuSearch 作为历史值保留，仅供老配置迁移与默认提示词回退。
+    SearchNetwork
+}
+
+// 检索来源是独立于「提示词 / 推理」的一条真实行为轴：
+// 它决定走哪个检索接口、以及 Tavily 的 topic 取值。
+public enum SearchSource
+{
+    None,
+    TavilyGeneral,
+    TavilyNews,
+    Zhihu
 }
 
 public enum ApiProtocol
@@ -29,6 +42,7 @@ public sealed class FunctionOption
     public string SystemPrompt { get; set; } = string.Empty;
     public double IconOffsetX { get; set; }
     public double IconOffsetY { get; set; }
+    public SearchSource SearchSource { get; set; } = SearchSource.None;
 
     public FunctionOption Clone()
     {
@@ -41,7 +55,8 @@ public sealed class FunctionOption
             Glyph = Glyph,
             SystemPrompt = SystemPrompt,
             IconOffsetX = IconOffsetX,
-            IconOffsetY = IconOffsetY
+            IconOffsetY = IconOffsetY,
+            SearchSource = SearchSource
         };
     }
 }
@@ -125,8 +140,8 @@ public sealed class AppConfig
     public string TavilyApiKeyProtected { get; set; } = string.Empty;
     public string ZhihuAccessSecretProtected { get; set; } = string.Empty;
 
-    // 用于把新增的「知乎搜索」功能只补一次：补过之后用户删掉就不会再被塞回来。
-    public bool ZhihuSearchFunctionSeeded { get; set; }
+    // 把默认的三个检索项并成「联网检索」只做一次：做过之后用户自行增删都不再被改动。
+    public bool FunctionSetConsolidated { get; set; }
     public bool KeepWindowOnTop { get; set; } = true;
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
@@ -148,7 +163,7 @@ public sealed class AppConfig
             SelectedProviderId = SelectedProviderId,
             TavilyApiKeyProtected = TavilyApiKeyProtected,
             ZhihuAccessSecretProtected = ZhihuAccessSecretProtected,
-            ZhihuSearchFunctionSeeded = ZhihuSearchFunctionSeeded,
+            FunctionSetConsolidated = FunctionSetConsolidated,
             KeepWindowOnTop = KeepWindowOnTop,
             HideWhenDeactivated = HideWhenDeactivated,
             AutoFillSelectedText = AutoFillSelectedText,

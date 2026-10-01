@@ -36,6 +36,7 @@
                 <RowDefinition x:Name="PromptRowDefinition" Height="Auto" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="48" />
             </Grid.RowDefinitions>
 
@@ -408,7 +409,46 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="3" Margin="10,0,8,0">
+            <!-- 来源切换条：只有选中检索类功能时才出现，「联网检索」用它覆盖原来的
+                 联网解释 / 新闻追踪 / 知乎搜索三个来源。独立占一行，避免功能多时盖住列表。 -->
+            <StackPanel x:Name="SourceStrip"
+                        Grid.Row="3"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="14,0,14,8"
+                        Visibility="Collapsed">
+                <TextBlock VerticalAlignment="Center"
+                           Margin="0,0,7,0"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="来源" />
+                <Button x:Name="SourceGeneralChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="TavilyGeneral"
+                        ToolTip="Tavily 全网搜索（Alt+1）"
+                        Content="全网"
+                        Click="SourceChip_Click" />
+                <Button x:Name="SourceNewsChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="TavilyNews"
+                        ToolTip="Tavily 新闻：偏向主流媒体的实时报道（Alt+2）"
+                        Content="新闻"
+                        Click="SourceChip_Click" />
+                <Button x:Name="SourceZhihuChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="Zhihu"
+                        ToolTip="知乎站内检索，需要 Access Secret（Alt+3）"
+                        Content="知乎"
+                        Click="SourceChip_Click" />
+                <TextBlock VerticalAlignment="Center"
+                           Margin="6,0,0,0"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="Alt+1/2/3 快速切换" />
+            </StackPanel>
+
+            <Grid Grid.Row="4" Margin="10,0,8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />

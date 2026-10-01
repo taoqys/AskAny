@@ -25,6 +25,8 @@ public partial class App : Application
         var isScreenshot = screenshotMode.Equals("--screenshot", StringComparison.OrdinalIgnoreCase) ||
                            screenshotMode.Equals("--screenshot-settings", StringComparison.OrdinalIgnoreCase) ||
                            screenshotMode.Equals("--screenshot-markdown", StringComparison.OrdinalIgnoreCase);
+        // 诊断模式：把配置读进来跑完整套迁移后另存为 JSON，用来核对迁移结果而不碰真实配置。
+        var isDumpConfig = screenshotMode.Equals("--dump-config", StringComparison.OrdinalIgnoreCase);
         var instanceName = e.Args
             .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
             ?.Split('=', 2)[1];
@@ -32,7 +34,7 @@ public partial class App : Application
             ? @"Local\AskAny.Desktop"
             : $@"Local\AskAny.Desktop.{instanceName}";
 
-        if (!isScreenshot)
+        if (!isScreenshot && !isDumpConfig)
         {
             var singleInstanceMutex = new Mutex(true, mutexName, out var isFirstInstance);
             if (!isFirstInstance)
@@ -46,6 +48,13 @@ public partial class App : Application
         }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+
+        if (isDumpConfig)
+        {
+            DumpConfig(e.Args);
+            Shutdown();
+            return;
+        }
 
         _httpClient = new HttpClient
         {
@@ -142,6 +151,36 @@ public partial class App : Application
         _doubleTapHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
         _doubleTapHook.DoubleCtrlPressed += (_, _) => CaptureScreenshotAndShow(mainWindow);
         _doubleTapHook.Install();
+    }
+
+    // 用法：AskAny.exe --dump-config <输入配置> <输出 json>
+    // 走的是和正常启动完全相同的 ConfigService.LoadAsync（含全部迁移），只是不启动界面、
+    // 也不写回原文件——用来核对「老配置迁移成什么样」，且不会动到用户的真实配置。
+    private static void DumpConfig(string[] args)
+    {
+        if (args.Length < 3)
+        {
+            return;
+        }
+
+        var inputPath = args[1];
+        var outputPath = args[2];
+        if (!File.Exists(inputPath))
+        {
+            return;
+        }
+
+        var normalized = new ConfigService(inputPath).LoadAsync().GetAwaiter().GetResult();
+        var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(
+            outputPath,
+            JsonSerializer.Serialize(normalized, JsonDefaults.Options),
+            Encoding.UTF8);
     }
 
     private void CaptureScreenshotAndShow(MainWindow mainWindow)

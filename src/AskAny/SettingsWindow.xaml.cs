@@ -69,10 +69,15 @@ public partial class SettingsWindow : Window
         {
             new FunctionModeOption("标准回答", WorkflowMode.Answer),
             new FunctionModeOption("解释说明", WorkflowMode.Explain),
-            new FunctionModeOption("联网解释", WorkflowMode.ExplainOnline),
-            new FunctionModeOption("知乎搜索", WorkflowMode.ZhihuSearch),
-            new FunctionModeOption("新闻追踪", WorkflowMode.TrackNews),
-            new FunctionModeOption("深度思考", WorkflowMode.Think)
+            new FunctionModeOption("深度思考（启用推理）", WorkflowMode.Think),
+            new FunctionModeOption("联网检索", WorkflowMode.SearchNetwork)
+        };
+        FunctionSearchSourceComboBox.ItemsSource =
+        new[]
+        {
+            new SearchSourceOption("全网（Tavily）", SearchSource.TavilyGeneral),
+            new SearchSourceOption("新闻（Tavily，偏向主流媒体）", SearchSource.TavilyNews),
+            new SearchSourceOption("知乎站内", SearchSource.Zhihu)
         };
         FunctionGlyphComboBox.ItemsSource =
         new[]
@@ -308,6 +313,34 @@ public partial class SettingsWindow : Window
         _selectedProvider = _providers[Math.Clamp(index, 0, _providers.Count - 1)];
         RefreshProviderList();
         LoadProviderToForm(_selectedProvider);
+    }
+
+    private void FunctionModeComboBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateSearchSourceAvailability();
+    }
+
+    // 「检索来源」只在「联网检索」下有意义；其余执行方式一律不检索。
+    private void UpdateSearchSourceAvailability()
+    {
+        var isNetwork = (FunctionModeComboBox.SelectedItem as FunctionModeOption)?.Mode
+                        == WorkflowMode.SearchNetwork;
+
+        FunctionSearchSourceComboBox.IsEnabled = isNetwork;
+        SearchSourceLabel.Opacity = isNetwork ? 1d : 0.5d;
+
+        if (isNetwork && FunctionSearchSourceComboBox.SelectedItem is null)
+        {
+            FunctionSearchSourceComboBox.SelectedIndex = 0;
+        }
+    }
+
+    // 历史检索模式在编辑界面统一显示为「联网检索」，保存时自然迁移到新模型。
+    private static WorkflowMode DisplayMode(FunctionOption function)
+    {
+        return FunctionCatalog.IsLegacySearchMode(function.Mode)
+            ? WorkflowMode.SearchNetwork
+            : function.Mode;
     }
 
     private void LoadProviderToForm(ProviderConfig? provider)
@@ -566,7 +599,21 @@ public partial class SettingsWindow : Window
             FunctionPromptBox.Text = function.SystemPrompt;
             FunctionModeComboBox.SelectedItem =
                 ((IEnumerable<FunctionModeOption>)FunctionModeComboBox.ItemsSource)
-                .FirstOrDefault(option => option.Mode == function.Mode);
+                .FirstOrDefault(option => option.Mode == DisplayMode(function));
+
+            // 历史检索模式（新闻追踪 / 联网解释 / 知乎搜索）在界面上统一按「联网检索」展示，
+            // 来源由其 SearchSource 决定；来源缺失时给一个可用默认值，避免下拉是空的。
+            var source = function.SearchSource;
+            if (source == SearchSource.None && DisplayMode(function) == WorkflowMode.SearchNetwork)
+            {
+                source = SearchSource.TavilyGeneral;
+            }
+
+            FunctionSearchSourceComboBox.SelectedItem =
+                ((IEnumerable<SearchSourceOption>)FunctionSearchSourceComboBox.ItemsSource)
+                .FirstOrDefault(option => option.Source == source)
+                ?? FunctionSearchSourceComboBox.Items[0];
+            UpdateSearchSourceAvailability();
             FunctionGlyphComboBox.SelectedItem =
                 ((IEnumerable<FunctionGlyphOption>)FunctionGlyphComboBox.ItemsSource)
                 .FirstOrDefault(option => option.Glyph == function.Glyph)
@@ -592,6 +639,10 @@ public partial class SettingsWindow : Window
                     ?? _selectedFunction.Glyph;
 
         _selectedFunction.Mode = mode;
+        _selectedFunction.SearchSource = mode == WorkflowMode.SearchNetwork
+            ? (FunctionSearchSourceComboBox.SelectedItem as SearchSourceOption)?.Source
+              ?? SearchSource.TavilyGeneral
+            : SearchSource.None;
         _selectedFunction.Name = string.IsNullOrWhiteSpace(FunctionNameBox.Text)
             ? FunctionCatalog.GetModeName(mode)
             : FunctionNameBox.Text.Trim();
@@ -745,6 +796,8 @@ public partial class SettingsWindow : Window
     private sealed record ProtocolOption(string Name, ApiProtocol Protocol);
 
     private sealed record FunctionModeOption(string Name, WorkflowMode Mode);
+
+    private sealed record SearchSourceOption(string Name, SearchSource Source);
 
     private sealed record FunctionGlyphOption(string Name, string Glyph);
 }

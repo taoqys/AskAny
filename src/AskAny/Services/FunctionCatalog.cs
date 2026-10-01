@@ -4,6 +4,8 @@ namespace AskAny.Services;
 
 public static class FunctionCatalog
 {
+    // 精简后的默认功能集：三个「不检索」的意图 + 一个「联网检索」（来源在面板上切换）。
+    // 原来的「联网解释 / 新闻追踪 / 知乎搜索」三项只是同一动作的不同检索来源，已合并。
     public static List<FunctionOption> CreateDefaultFunctions()
     {
         return
@@ -27,15 +29,6 @@ public static class FunctionCatalog
                 0.5,
                 -2.5),
             Create(
-                "news",
-                WorkflowMode.TrackNews,
-                "新闻追踪",
-                "搜索最近动态并整理事件脉络",
-                "\uE909",
-                "你是中文新闻分析助手。根据提供的最新检索资料整理事件动态，按重要性组织内容，区分事实、背景和可能影响。",
-                0,
-                -2.5),
-            Create(
                 "think",
                 WorkflowMode.Think,
                 "深度思考",
@@ -44,31 +37,41 @@ public static class FunctionCatalog
                 "你是严谨的中文分析助手。给出必要的分析要点，再明确写出最终结论。不要虚构不确定信息。",
                 0,
                 -3.5),
-            Create(
-                "explain-online",
-                WorkflowMode.ExplainOnline,
-                "联网解释",
-                "结合网络资料解释问题并标注来源",
-                "\uE774",
-                "你是中文研究型解释助手。结合提供的联网检索资料解释问题，明确区分资料事实、推断和你的结论。",
-                0,
-                -2.5),
-            CreateZhihuSearch()
+            CreateNetwork()
         ];
     }
 
-    public static FunctionOption CreateZhihuSearch()
+    public static FunctionOption CreateNetwork()
     {
-        return Create(
-            "zhihu-search",
-            WorkflowMode.ZhihuSearch,
-            "知乎搜索",
-            "只检索知乎站内内容，再用当前模型回答",
-            "\uE721",
-            "你是中文研究型助手。基于下面提供的知乎站内检索资料回答问题，" +
-            "用 [1]、[2] 标注来源编号，并明确区分资料中的事实与你的推断；资料不足时直接说明。",
+        var function = Create(
+            "network",
+            WorkflowMode.SearchNetwork,
+            "联网检索",
+            "检索网络资料后回答，可切换全网 / 新闻 / 知乎",
+            "\uE774",
+            GetDefaultSystemPrompt(WorkflowMode.SearchNetwork),
             0,
             -2.5);
+        function.SearchSource = SearchSource.TavilyGeneral;
+        return function;
+    }
+
+    public static bool IsLegacySearchMode(WorkflowMode mode)
+    {
+        return mode is WorkflowMode.TrackNews
+            or WorkflowMode.ExplainOnline
+            or WorkflowMode.ZhihuSearch;
+    }
+
+    public static SearchSource SearchSourceForLegacyMode(WorkflowMode mode)
+    {
+        return mode switch
+        {
+            WorkflowMode.TrackNews => SearchSource.TavilyNews,
+            WorkflowMode.ExplainOnline => SearchSource.TavilyGeneral,
+            WorkflowMode.ZhihuSearch => SearchSource.Zhihu,
+            _ => SearchSource.None
+        };
     }
 
     public static FunctionOption CreateCustom()
@@ -99,6 +102,9 @@ public static class FunctionCatalog
             WorkflowMode.ZhihuSearch =>
                 "你是中文研究型助手。基于下面提供的知乎站内检索资料回答问题，" +
                 "用 [1]、[2] 标注来源编号，并明确区分资料中的事实与你的推断；资料不足时直接说明。",
+            WorkflowMode.SearchNetwork =>
+                "你是中文研究型助手。基于下面提供的检索资料回答问题，" +
+                "用 [1]、[2] 标注来源编号，并明确区分资料中的事实与你的推断；资料不足时直接说明。",
             _ => "你是一个中文 AI 助手。"
         };
     }
@@ -113,7 +119,19 @@ public static class FunctionCatalog
             WorkflowMode.Think => "深度思考（启用推理）",
             WorkflowMode.ExplainOnline => "联网解释（联网）",
             WorkflowMode.ZhihuSearch => "知乎搜索（知乎站内检索）",
+            WorkflowMode.SearchNetwork => "联网检索",
             _ => "标准回答"
+        };
+    }
+
+    public static string GetSearchSourceName(SearchSource source)
+    {
+        return source switch
+        {
+            SearchSource.TavilyGeneral => "全网",
+            SearchSource.TavilyNews => "新闻",
+            SearchSource.Zhihu => "知乎",
+            _ => "不检索"
         };
     }
 
