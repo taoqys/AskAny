@@ -54,7 +54,11 @@ public sealed class SearchService
         if (news)
         {
             body["topic"] = "news";
-            body["days"] = 7;
+            // 这里原来发的是 days=7，但 days 并不在 Tavily 的 API 里（官方 25 个请求参数
+            // 中没有它），所以「最近 7 天」从来没生效过。time_range 才是官方的时间窗参数。
+            body["time_range"] = "week";
+            // time_range 默认不剔除「没有可识别发布日期」的结果，对新闻语义来说是噪声。
+            body["filter_by_published_date"] = true;
         }
         else
         {

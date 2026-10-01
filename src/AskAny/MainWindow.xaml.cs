@@ -218,7 +218,7 @@ public partial class MainWindow : Window
             Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
             e.Handled = true;
-            _ = CaptureRegionAsync();
+            SafeTask.Run(() => CaptureRegionAsync(), "区域截图", message => StatusText.Text = message);
             return;
         }
 
@@ -275,7 +275,7 @@ public partial class MainWindow : Window
             if (PromptEditorBorder.Visibility == Visibility.Visible)
             {
                 CommitModelSelection();
-                _ = ExecuteSelectedAsync();
+                SafeTask.Run(() => ExecuteSelectedAsync(), "执行请求", message => StatusText.Text = message);
             }
 
             e.Handled = true;
@@ -749,8 +749,17 @@ public partial class MainWindow : Window
 
         // _functions 是 _config.Functions 的编辑副本，改动必须同步回配置才会持久化。
         _config.Functions = _functions.Select(function => function.Clone()).ToList();
-        _ = _configService.SaveAsync(_config);
+        SaveConfigInBackground();
         return true;
+    }
+
+    // 模型切换等操作后要落盘，但保存失败必须让用户看见 —— 否则会以为设置已经生效。
+    private void SaveConfigInBackground()
+    {
+        SafeTask.Run(
+            () => _configService.SaveAsync(_config),
+            "保存配置",
+            message => StatusText.Text = message);
     }
 
     private void SetOutputMarkdown(string markdown, string? reasoning)
@@ -787,12 +796,10 @@ public partial class MainWindow : Window
         for (var index = 0; index < search.Sources.Count; index++)
         {
             var source = search.Sources[index];
-            var title = source.Title
-                .Replace("[", "\\[", StringComparison.Ordinal)
-                .Replace("]", "\\]", StringComparison.Ordinal);
+            var title = SanitizeSourceTitle(source.Title);
             var label = string.IsNullOrWhiteSpace(source.Url)
                 ? title
-                : $"[{title}]({source.Url})";
+                : $"[{title}](<{source.Url}>)";
             builder.Append(index + 1)
                 .Append(". ")
                 .Append(label);
@@ -806,6 +813,26 @@ public partial class MainWindow : Window
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    // 来源标题直接来自检索结果，可能含换行、方括号、井号。
+    // 换行会让标题跑出列表项、井号在行首会变成标题，都必须清掉；
+    // 链接地址则用尖括号包裹，否则地址里出现 ) 会提前截断链接。
+    private static string SanitizeSourceTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return "未命名来源";
+        }
+
+        var flattened = title.ReplaceLineEndings(" ").Trim();
+
+        return flattened
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("[", "\\[", StringComparison.Ordinal)
+            .Replace("]", "\\]", StringComparison.Ordinal)
+            .TrimStart('#')
+            .Trim();
     }
 
     private void PromptBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -1110,7 +1137,7 @@ public partial class MainWindow : Window
         provider.SelectedModel = typedValue;
         _config.SelectedProviderId = provider.Id;
         RefreshModelChoices();
-        _ = _configService.SaveAsync(_config);
+        SaveConfigInBackground();
     }
 
     private void RefreshModelChoices()
@@ -1152,7 +1179,7 @@ public partial class MainWindow : Window
         choice.Provider.SelectedModel = choice.Model;
         _config.SelectedProviderId = choice.Provider.Id;
         UpdateAttachmentTargetText();
-        _ = _configService.SaveAsync(_config);
+        SaveConfigInBackground();
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -1386,7 +1413,7 @@ public partial class MainWindow : Window
 
         e.Handled = true;
         FunctionList.SelectedItem = item.DataContext;
-        _ = ExecuteSelectedAsync();
+        SafeTask.Run(() => ExecuteSelectedAsync(), "执行请求", message => StatusText.Text = message);
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)

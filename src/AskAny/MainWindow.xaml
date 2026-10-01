@@ -89,6 +89,8 @@
                             Drop="Input_Drop">
                         <Grid>
                             <TextBox x:Name="PromptBox"
+                                     AutomationProperties.AutomationId="PromptBox"
+                                     AutomationProperties.Name="问题输入框"
                                      MinHeight="44"
                                      Padding="3,5,3,4"
                                      VerticalContentAlignment="Center"
@@ -125,6 +127,8 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
                     <Button x:Name="AttachmentButton"
+                            AutomationProperties.AutomationId="AttachmentButton"
+                            AutomationProperties.Name="添加图片"
                             Style="{StaticResource IconButton}"
                             ToolTip="添加图片（双击 Ctrl 区域截图 · Ctrl+V 粘贴 · 拖入图片）"
                             Click="AttachmentButton_Click">
@@ -202,6 +206,8 @@
                          Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="FunctionList"
+                         AutomationProperties.Name="功能列表"
                          SelectionChanged="FunctionList_SelectionChanged">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
@@ -388,6 +394,8 @@
                             CornerRadius="7">
                         <Grid>
                             <RichTextBox x:Name="OutputRichText"
+                                         AutomationProperties.AutomationId="OutputRichText"
+                                         AutomationProperties.Name="回答内容"
                                          Margin="12"
                                          Padding="0"
                                          IsReadOnly="True"
@@ -490,6 +498,8 @@
                            Foreground="{StaticResource MutedBrush}"
                            Text="模型" />
                 <ComboBox x:Name="ModelComboBox"
+                          AutomationProperties.AutomationId="ModelComboBox"
+                          AutomationProperties.Name="模型选择"
                           Grid.Column="2"
                           Width="200"
                           Height="30"
@@ -505,6 +515,7 @@
                 <Button Grid.Column="3"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="HistoryButton"
+                        AutomationProperties.Name="历史记录"
                         ToolTip="历史记录"
                         Click="HistoryButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -515,6 +526,7 @@
                 <Button Grid.Column="4"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="SettingsButton"
+                        AutomationProperties.Name="设置"
                         ToolTip="设置（F1）"
                         Click="SettingsButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"

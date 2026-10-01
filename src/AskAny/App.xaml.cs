@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Media;
@@ -27,14 +28,19 @@ public partial class App : Application
                            screenshotMode.Equals("--screenshot-markdown", StringComparison.OrdinalIgnoreCase);
         // 诊断模式：把配置读进来跑完整套迁移后另存为 JSON，用来核对迁移结果而不碰真实配置。
         var isDumpConfig = screenshotMode.Equals("--dump-config", StringComparison.OrdinalIgnoreCase);
-        var instanceName = e.Args
-            .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
-            ?.Split('=', 2)[1];
+        // --instance= 只对截图/诊断模式开放。普通启动下如果允许它绕过单实例锁，
+        // 两个实例会各装一个全局键盘钩子，双击 Shift 会被响应两次、弹出两个面板。
+        var isDiagnosticMode = isScreenshot || isDumpConfig;
+        var instanceName = isDiagnosticMode
+            ? e.Args
+                .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
+                ?.Split('=', 2)[1]
+            : null;
         var mutexName = string.IsNullOrWhiteSpace(instanceName)
             ? @"Local\AskAny.Desktop"
             : $@"Local\AskAny.Desktop.{instanceName}";
 
-        if (!isScreenshot && !isDumpConfig)
+        if (!isDiagnosticMode)
         {
             var singleInstanceMutex = new Mutex(true, mutexName, out var isFirstInstance);
             if (!isFirstInstance)
@@ -48,6 +54,14 @@ public partial class App : Application
         }
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        // 托盘常驻应用挂掉时用户几乎拿不到线索，这里把三条异常通道都记下来。
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            ErrorLog.Write("AppDomain.UnhandledException", args.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            ErrorLog.Write("TaskScheduler.UnobservedTaskException", args.Exception);
+            args.SetObserved();
+        };
 
         if (isDumpConfig)
         {
@@ -198,15 +212,11 @@ public partial class App : Application
 
     private void CaptureScreenshotAndShow(MainWindow mainWindow)
     {
-        if (Dispatcher.CheckAccess())
-        {
-            _ = mainWindow.ShowScreenshotFromHotkeyAsync();
-            return;
-        }
-
         Dispatcher.BeginInvoke(
             DispatcherPriority.Normal,
-            () => _ = mainWindow.ShowScreenshotFromHotkeyAsync());
+            () => SafeTask.Run(
+                () => mainWindow.ShowScreenshotFromHotkeyAsync(),
+                "全局截图快捷键"));
     }
 
     private void CaptureSelectionAndShow(MainWindow mainWindow)
@@ -232,6 +242,7 @@ public partial class App : Application
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(new Forms.ToolStripMenuItem("双击 Shift 唤起") { Enabled = false });
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("打开日志", null, (_, _) => OpenErrorLog());
         menu.Items.Add("退出", null, (_, _) => Dispatch(mainWindow.RequestExit));
 
         using var stream = GetResourceStream(
@@ -249,6 +260,31 @@ public partial class App : Application
     private void Dispatch(Action action)
     {
         Dispatcher.BeginInvoke(DispatcherPriority.Normal, action);
+    }
+
+    // 日志不存在时也把目录打开，让用户知道去哪看。
+    private static void OpenErrorLog()
+    {
+        try
+        {
+            if (File.Exists(ErrorLog.LogPath))
+            {
+                Process.Start(new ProcessStartInfo(ErrorLog.LogPath) { UseShellExecute = true });
+                return;
+            }
+
+            var directory = Path.GetDirectoryName(ErrorLog.LogPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                System.IO.Directory.CreateDirectory(directory);
+                Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+            }
+        }
+        catch (Exception exception) when (
+            exception is System.ComponentModel.Win32Exception or IOException)
+        {
+            ErrorLog.Write("打开日志", exception);
+        }
     }
 
     private static void SaveScreenshot(Window window, string outputPath)
@@ -295,8 +331,10 @@ public partial class App : Application
         object sender,
         DispatcherUnhandledExceptionEventArgs e)
     {
+        ErrorLog.Write("DispatcherUnhandledException", e.Exception);
+
         MessageBox.Show(
-            e.Exception.Message,
+            $"{e.Exception.Message}\n\n详细信息已写入：\n{ErrorLog.LogPath}",
             "AskAny",
             MessageBoxButton.OK,
             MessageBoxImage.Error);
