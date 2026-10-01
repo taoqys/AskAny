@@ -4,8 +4,8 @@ namespace AskAny.Services;
 
 public static class FunctionCatalog
 {
-    // 精简后的默认功能集：三个「不检索」的意图 + 一个「联网检索」（来源在面板上切换）。
-    // 原来的「联网解释 / 新闻追踪 / 知乎搜索」三项只是同一动作的不同检索来源，已合并。
+    // 精简后的默认功能集：2 个「不检索」的意图 + 1 个「联网检索」（来源在面板上切换）。
+    // 「回答」与「解释」原本只差一段系统提示词、没有任何行为差异，已合并为一项。
     public static List<FunctionOption> CreateDefaultFunctions()
     {
         return
@@ -13,21 +13,12 @@ public static class FunctionCatalog
             Create(
                 "answer",
                 WorkflowMode.Answer,
-                "回答此问题",
-                "直接、准确地解答当前问题",
+                "回答",
+                "直接回答或解释当前问题",
                 "\uE8BD",
-                "你是一个严谨、直接的中文 AI 助手。优先给出可执行、准确、简洁的回答。",
+                GetDefaultSystemPrompt(WorkflowMode.Answer),
                 0,
                 -3.5),
-            Create(
-                "explain",
-                WorkflowMode.Explain,
-                "解释说明",
-                "拆解概念、背景和关键要点",
-                "\uE946",
-                "你是一位善于表达的中文教师。用清晰、通俗的方式解释概念，按必要性给出定义、背景、例子和易错点。",
-                0.5,
-                -2.5),
             Create(
                 "think",
                 WorkflowMode.Think,
@@ -90,7 +81,7 @@ public static class FunctionCatalog
         return mode switch
         {
             WorkflowMode.Answer =>
-                "你是一个严谨、直接的中文 AI 助手。优先给出可执行、准确、简洁的回答。",
+                "给出简洁明确的回答或解释.",
             WorkflowMode.Explain =>
                 "你是一位善于表达的中文教师。用清晰、通俗的方式解释概念，按必要性给出定义、背景、例子和易错点。",
             WorkflowMode.TrackNews =>

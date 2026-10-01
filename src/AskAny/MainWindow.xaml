@@ -445,7 +445,7 @@
                            Margin="6,0,0,0"
                            FontSize="11"
                            Foreground="{StaticResource MutedBrush}"
-                           Text="Alt+1/2/3 快速切换" />
+                           Text="PgUp/PgDn 循环 · Alt+1/2/3 直达" />
             </StackPanel>
 
             <Grid Grid.Row="4" Margin="10,0,8,0">

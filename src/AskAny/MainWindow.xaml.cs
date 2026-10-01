@@ -173,7 +173,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Alt+1/2/3 切换「联网检索」的来源。按着 Alt 时 WPF 把按键放在 SystemKey 上、
+        // PgUp / PgDn 循环切换来源：不用记数字映射，两个大键盲按也能命中。
+        // 仅在来源条可见（选中检索类功能）时接管，否则交还给列表滚动。
+        if ((e.Key is Key.PageUp or Key.PageDown) &&
+            SourceStrip.Visibility == Visibility.Visible)
+        {
+            CycleSearchBackend(e.Key == Key.PageDown ? 1 : -1);
+            e.Handled = true;
+            return;
+        }
+
+        // Alt+1/2/3 直接切到指定来源。按着 Alt 时 WPF 把按键放在 SystemKey 上、
         // 而 Key 只会是 Key.System，所以这里必须读 SystemKey，否则永远匹配不上。
         if (e.Key == Key.System && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
         {
@@ -697,6 +707,29 @@ public partial class MainWindow : Window
         {
             TrySetSearchBackend(source);
         }
+    }
+
+    // 来源固定顺序循环，PgUp / PgDn 用；顺序与来源条上从左到右一致。
+    private static readonly SearchBackend[] SearchBackendCycle =
+    [
+        SearchBackend.TavilyGeneral,
+        SearchBackend.TavilyNews,
+        SearchBackend.Zhihu
+    ];
+
+    private void CycleSearchBackend(int offset)
+    {
+        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        {
+            return;
+        }
+
+        var current = Array.IndexOf(SearchBackendCycle, option.SearchBackend);
+        var next = current < 0
+            ? 0
+            : ((current + offset) % SearchBackendCycle.Length + SearchBackendCycle.Length)
+              % SearchBackendCycle.Length;
+        TrySetSearchBackend(SearchBackendCycle[next]);
     }
 
     private bool TrySetSearchBackend(SearchBackend source)

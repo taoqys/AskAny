@@ -142,6 +142,9 @@ public sealed class AppConfig
 
     // 把默认的三个检索项并成「联网检索」只做一次：做过之后用户自行增删都不再被改动。
     public bool FunctionSetConsolidated { get; set; }
+
+    // 「回答」与「解释」合并成一项，同样只做一次。
+    public bool AnswerExplainMerged { get; set; }
     public bool KeepWindowOnTop { get; set; } = true;
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
@@ -164,6 +167,7 @@ public sealed class AppConfig
             TavilyApiKeyProtected = TavilyApiKeyProtected,
             ZhihuAccessSecretProtected = ZhihuAccessSecretProtected,
             FunctionSetConsolidated = FunctionSetConsolidated,
+            AnswerExplainMerged = AnswerExplainMerged,
             KeepWindowOnTop = KeepWindowOnTop,
             HideWhenDeactivated = HideWhenDeactivated,
             AutoFillSelectedText = AutoFillSelectedText,

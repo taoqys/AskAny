@@ -45,7 +45,7 @@ jobs:
             @{ Path = "artifacts/ui/settings-window.png"; Arguments = @("--screenshot-settings", "artifacts/ui/settings-window.png", "3") },
             @{ Path = "artifacts/ui/markdown-preview.png"; Arguments = @("--screenshot-markdown", "artifacts/ui/markdown-preview.png") },
             @{ Path = "artifacts/ui/main.png"; Arguments = @("--screenshot", "artifacts/ui/main.png") },
-            @{ Path = "artifacts/ui/main-network.png"; Arguments = @("--screenshot", "artifacts/ui/main-network.png", "3") }
+            @{ Path = "artifacts/ui/main-network.png"; Arguments = @("--screenshot", "artifacts/ui/main-network.png", "2") }
           )
           foreach ($capture in $captures) {
             $process = Start-Process `

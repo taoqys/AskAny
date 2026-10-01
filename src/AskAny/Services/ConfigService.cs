@@ -66,6 +66,7 @@ public sealed class ConfigService
     {
         config.Functions = NormalizeFunctions(config.Functions);
         config.Functions = ConsolidateFunctions(config, config.Functions);
+        config.Functions = MergeAnswerAndExplain(config, config.Functions);
 
         if (config.Providers.Count == 0)
         {
@@ -185,6 +186,32 @@ public sealed class ConfigService
             carriedSource: single is null
                 ? null
                 : FunctionCatalog.SearchBackendForLegacyMode(single.Mode));
+    }
+
+    // 「回答」与「解释」只差一段系统提示词，检索 / 推理 / 温度 / 多轮上下文全部相同，
+    // 因此合并成一项。只在两者同时存在时动手：只剩一个时「合并」本身没有意义，
+    // 不该去改用户留下的那一个。
+    private static List<FunctionOption> MergeAnswerAndExplain(
+        AppConfig config,
+        List<FunctionOption> functions)
+    {
+        if (config.AnswerExplainMerged)
+        {
+            return functions;
+        }
+
+        config.AnswerExplainMerged = true;
+
+        var answer = functions.FirstOrDefault(function => function.Mode == WorkflowMode.Answer);
+        var explain = functions.FirstOrDefault(function => function.Mode == WorkflowMode.Explain);
+        if (answer is null || explain is null)
+        {
+            return functions;
+        }
+
+        // 保留 Answer 那一项（名称 / 图标 / 位置都不动），提示词换成合并后的默认值。
+        answer.SystemPrompt = FunctionCatalog.GetDefaultSystemPrompt(WorkflowMode.Answer);
+        return functions.Where(function => !ReferenceEquals(function, explain)).ToList();
     }
 
     private static bool HasDefaultPrompt(FunctionOption function)
