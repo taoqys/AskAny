@@ -148,10 +148,7 @@ public class SearchServiceTests
     {
         var handler = new StubHttpMessageHandler(
             HttpStatusCode.OK,
-            """{"Code":0,"Message":"success","Data":{"Items":[
-                 {"Title":"没有链接","ContentText":"x","Url":"","EditTime":1710000000},
-                 {"Title":"有链接","ContentText":"y","Url":"https://zhihu.com/p/2","EditTime":1710000000}
-               ]}}""");
+            """{"Code":0,"Message":"success","Data":{"Items":[{"Title":"没有链接","ContentText":"x","Url":"","EditTime":1710000000},{"Title":"有链接","ContentText":"y","Url":"https://zhihu.com/p/2","EditTime":1710000000}]}}""");
 
         var packet = await Build(handler).SearchZhihuAsync("查询", "secret");
 
