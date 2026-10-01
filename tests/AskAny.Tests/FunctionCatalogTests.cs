@@ -47,7 +47,7 @@ public class FunctionCatalogTests
     [InlineData(WorkflowMode.SearchNetwork, SearchBackend.None)]
     public void LegacyModesMapToSearchBackends(WorkflowMode mode, SearchBackend expected)
     {
-        Assert.Equal(expected, FunctionCatalog.SearchSourceForLegacyMode(mode));
+        Assert.Equal(expected, FunctionCatalog.SearchBackendForLegacyMode(mode));
     }
 
     [Theory]
