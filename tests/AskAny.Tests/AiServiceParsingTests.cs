@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using System.Threading.Tasks;
 using AskAny.Models;
 using AskAny.Services;
@@ -197,6 +198,8 @@ public class AiServiceParsingTests
     }
 
     // 检索结果会被拼进系统提示词，并要求模型用 [1][2] 标注来源。
+    // 注意：System.Text.Json 默认会把非 ASCII 转义成 \uXXXX，
+    // 所以不能直接在序列化后的 body 里找中文，必须解析出来再断言。
     [Fact]
     public async Task SearchResultsAreInjectedIntoSystemPrompt()
     {
@@ -209,8 +212,15 @@ public class AiServiceParsingTests
         await new AiService(new HttpClient(handler)).ExecuteAsync(
             FunctionFor(WorkflowMode.SearchNetwork), "问题", ChatProvider(), "key", search);
 
-        Assert.Contains("来源标题", handler.LastRequestBody);
-        Assert.Contains("https://example.com/a", handler.LastRequestBody);
-        Assert.Contains("[1]", handler.LastRequestBody);
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        var systemPrompt = document.RootElement
+            .GetProperty("messages")[0]
+            .GetProperty("content")
+            .GetString();
+
+        Assert.NotNull(systemPrompt);
+        Assert.Contains("来源标题", systemPrompt);
+        Assert.Contains("https://example.com/a", systemPrompt);
+        Assert.Contains("[1]", systemPrompt);
     }
 }

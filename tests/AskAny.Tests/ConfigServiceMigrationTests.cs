@@ -67,7 +67,8 @@ public class ConfigServiceMigrationTests
         var config = await ConfigFixture.NormalizeAsync(json);
 
         var network = Assert.Single(
-            config.Functions.Where(function => function.Mode == WorkflowMode.SearchNetwork));
+            config.Functions,
+            function => function.Mode == WorkflowMode.SearchNetwork);
 
         Assert.Equal(customNews, network.SystemPrompt);
         Assert.Equal(SearchBackend.TavilyNews, network.SearchBackend);
@@ -99,7 +100,8 @@ public class ConfigServiceMigrationTests
 
         // 未被改动的知乎项被并入「联网检索」，来源可再切回来。
         var network = Assert.Single(
-            config.Functions.Where(function => function.Mode == WorkflowMode.SearchNetwork));
+            config.Functions,
+            function => function.Mode == WorkflowMode.SearchNetwork);
         Assert.Equal(SearchBackend.TavilyGeneral, network.SearchBackend);
     }
 
