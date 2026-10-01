@@ -53,7 +53,9 @@ DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的
 
 知乎搜索调用 `https://developer.zhihu.com/api/v1/content/zhihu_search`，需要 Bearer 鉴权加秒级时间戳，单次最多返回 10 条。时间戳与服务端相差超过 10 分钟会返回 20001，因此本机时间需要准确。
 
-配置保存在 `%APPDATA%\AskAny\config.json`，历史记录保存在 `%APPDATA%\AskAny\history.json`。密钥字段使用 Windows DPAPI 加密。
+配置保存在 `%APPDATA%\AskAny\config.json`，历史记录保存在 `%APPDATA%\AskAny\history.json`。密钥字段使用 Windows DPAPI 加密。运行期异常写入 `%APPDATA%\AskAny\error.log`（超过 256KB 轮转一次），可从托盘菜单打开。
+
+全局键盘钩子可能被系统摘掉（回调超时），且不会有任何通知。程序每 30 分钟自动重装一次以自愈，托盘菜单也提供「重新注册全局快捷键」；注册失败会记日志并弹出托盘提示。
 
 选区捕获按三层依次尝试：焦点元素及其祖先、前台窗口内的 Document（浏览器把页面内容挂在这里）、最后对浏览器窗口模拟一次 `Ctrl+C` 兜底。后两层用 `GetForegroundWindow` 定位窗口，不依赖 UI Automation 的父链遍历。兜底只在浏览器窗口启用，并且会用剪贴板序列号确认「确实发生了复制」——没有选区时不会把剪贴板里的旧内容填进输入框；捕获后会尽量还原原来的剪贴板内容。
 

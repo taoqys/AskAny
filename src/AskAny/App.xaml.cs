@@ -16,6 +16,8 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private HttpClient? _httpClient;
     private GlobalDoubleTapHook? _doubleTapHook;
+    private DispatcherTimer? _hotkeyWatchdog;
+    private bool _hotkeyFailureNotified;
     private Forms.NotifyIcon? _trayIcon;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -183,7 +185,64 @@ public partial class App : Application
         _doubleTapHook = new GlobalDoubleTapHook();
         _doubleTapHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
         _doubleTapHook.DoubleCtrlPressed += (_, _) => CaptureScreenshotAndShow(mainWindow);
-        _doubleTapHook.Install();
+        InstallHotkeyWithFeedback();
+
+        StartHotkeyWatchdog();
+    }
+
+    // 注册失败不能让整个应用挂掉：记日志 + 托盘气泡提示，用户还能从托盘菜单重试。
+    private void InstallHotkeyWithFeedback(bool notify = false)
+    {
+        if (_doubleTapHook is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _doubleTapHook.Reinstall();
+
+            if (notify)
+            {
+                ErrorLog.Write("全局快捷键已重新注册");
+                ShowTrayBalloon("AskAny", "全局快捷键已重新注册。");
+            }
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            ErrorLog.Write("注册全局快捷键失败", exception);
+
+            if (notify || !_hotkeyFailureNotified)
+            {
+                _hotkeyFailureNotified = true;
+                ShowTrayBalloon(
+                    "AskAny 快捷键不可用",
+                    "无法注册全局键盘监听，双击 Shift / 双击 Ctrl 将无效。可从托盘菜单重试。");
+            }
+        }
+    }
+
+    // 钩子被系统摘掉是没有通知的，只能定期重装来自愈。间隔取 30 分钟：
+    // 重装瞬间（微秒级）理论上会漏掉按键，频率越低影响越小。
+    private void StartHotkeyWatchdog()
+    {
+        _hotkeyWatchdog = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMinutes(30)
+        };
+        _hotkeyWatchdog.Tick += (_, _) => InstallHotkeyWithFeedback();
+        _hotkeyWatchdog.Start();
+    }
+
+    private void ShowTrayBalloon(string title, string text)
+    {
+        try
+        {
+            _trayIcon?.ShowBalloonTip(5000, title, text, Forms.ToolTipIcon.Info);
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     // 有配置文件时 LoadConfigurationAsync 是真正异步的。原来 Show() 之后立刻截图，
@@ -270,6 +329,7 @@ public partial class App : Application
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(new Forms.ToolStripMenuItem("双击 Shift 唤起") { Enabled = false });
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add("重新注册全局快捷键", null, (_, _) => InstallHotkeyWithFeedback(notify: true));
         menu.Items.Add("打开日志", null, (_, _) => OpenErrorLog());
         menu.Items.Add("退出", null, (_, _) => Dispatch(mainWindow.RequestExit));
 
@@ -342,6 +402,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _hotkeyWatchdog?.Stop();
         _doubleTapHook?.Dispose();
         if (_trayIcon is not null)
         {
