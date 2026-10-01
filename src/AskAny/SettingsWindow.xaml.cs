@@ -602,17 +602,18 @@ public partial class SettingsWindow : Window
                 .FirstOrDefault(option => option.Mode == DisplayMode(function));
 
             // 历史检索模式（新闻追踪 / 联网解释 / 知乎搜索）在界面上统一按「联网检索」展示，
-            // 来源由其 SearchBackend 决定；来源缺失时给一个可用默认值，避免下拉是空的。
-            var source = function.SearchBackend;
-            if (source == SearchBackend.None && DisplayMode(function) == WorkflowMode.SearchNetwork)
-            {
-                source = SearchBackend.TavilyGeneral;
-            }
+            // 来源由其 SearchBackend 决定。非检索的执行方式下留空并禁用 —— 显示一个具体来源
+            //（如「全网」）会让人以为「标准回答」也会去联网检索。
+            var isNetwork = DisplayMode(function) == WorkflowMode.SearchNetwork;
+            var backend = isNetwork && function.SearchBackend == SearchBackend.None
+                ? SearchBackend.TavilyGeneral
+                : function.SearchBackend;
 
-            FunctionSearchBackendComboBox.SelectedItem =
-                ((IEnumerable<SearchBackendOption>)FunctionSearchBackendComboBox.ItemsSource)
-                .FirstOrDefault(option => option.Source == source)
-                ?? FunctionSearchBackendComboBox.Items[0];
+            FunctionSearchBackendComboBox.SelectedItem = isNetwork
+                ? ((IEnumerable<SearchBackendOption>)FunctionSearchBackendComboBox.ItemsSource)
+                  .FirstOrDefault(option => option.Source == backend)
+                  ?? FunctionSearchBackendComboBox.Items[0]
+                : null;
             UpdateSearchBackendAvailability();
             FunctionGlyphComboBox.SelectedItem =
                 ((IEnumerable<FunctionGlyphOption>)FunctionGlyphComboBox.ItemsSource)
