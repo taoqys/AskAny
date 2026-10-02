@@ -11,11 +11,21 @@ public static class ErrorLog
 {
     private const long MaxBytes = 256 * 1024;
     private static readonly object Gate = new();
-    private static readonly string Directory = Path.Combine(
+
+    private static string _directory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "AskAny");
 
-    public static string LogPath { get; } = Path.Combine(Directory, "error.log");
+    private static string _logPath = Path.Combine(_directory, "error.log");
+
+    public static string LogPath => _logPath;
+
+    // 仅供测试：把日志改写到指定文件，避免污染真实的 %APPDATA%。
+    public static void UsePathForTesting(string logPath)
+    {
+        _logPath = logPath;
+        _directory = Path.GetDirectoryName(logPath) ?? _directory;
+    }
 
     public static void Write(string context, Exception? exception = null)
     {
@@ -55,9 +65,9 @@ public static class ErrorLog
 
             lock (Gate)
             {
-                System.IO.Directory.CreateDirectory(Directory);
+                System.IO.Directory.CreateDirectory(_directory);
                 RotateIfNeeded();
-                File.AppendAllText(LogPath, builder.ToString(), Encoding.UTF8);
+                File.AppendAllText(_logPath, builder.ToString(), Encoding.UTF8);
             }
         }
         catch (IOException)
@@ -73,15 +83,15 @@ public static class ErrorLog
     {
         try
         {
-            var info = new FileInfo(LogPath);
+            var info = new FileInfo(_logPath);
             if (!info.Exists || info.Length < MaxBytes)
             {
                 return;
             }
 
-            var previous = LogPath + ".1";
+            var previous = _logPath + ".1";
             File.Delete(previous);
-            File.Move(LogPath, previous);
+            File.Move(_logPath, previous);
         }
         catch (IOException)
         {
