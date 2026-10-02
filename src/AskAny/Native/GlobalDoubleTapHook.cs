@@ -71,6 +71,21 @@ public sealed class GlobalDoubleTapHook : IDisposable
         }
     }
 
+    public bool IsInstalled => _hook != IntPtr.Zero;
+
+    // 低级键盘钩子的回调一旦超时，系统会直接把钩子摘掉（表现为双击 Shift 突然失效），
+    // 而且不会通知我们。这里提供重装入口，由上层定期调用以自愈。
+    public void Reinstall()
+    {
+        if (_hook != IntPtr.Zero)
+        {
+            UnhookWindowsHookEx(_hook);
+            _hook = IntPtr.Zero;
+        }
+
+        Install();
+    }
+
     private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)

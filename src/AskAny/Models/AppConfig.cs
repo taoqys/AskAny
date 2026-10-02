@@ -8,7 +8,22 @@ public enum WorkflowMode
     Explain,
     TrackNews,
     Think,
-    ExplainOnline
+    ExplainOnline,
+    // 追加在末尾：枚举按名称序列化，新值放最后不会影响已有配置。
+    ZhihuSearch,
+    // 合并后的「联网检索」：具体检索哪个来源由 FunctionOption.SearchBackend 决定。
+    // TrackNews / ExplainOnline / ZhihuSearch 作为历史值保留，仅供老配置迁移与默认提示词回退。
+    SearchNetwork
+}
+
+// 检索来源是独立于「提示词 / 推理」的一条真实行为轴：
+// 它决定走哪个检索接口、以及 Tavily 的 topic 取值。
+public enum SearchBackend
+{
+    None,
+    TavilyGeneral,
+    TavilyNews,
+    Zhihu
 }
 
 public enum ApiProtocol
@@ -27,6 +42,7 @@ public sealed class FunctionOption
     public string SystemPrompt { get; set; } = string.Empty;
     public double IconOffsetX { get; set; }
     public double IconOffsetY { get; set; }
+    public SearchBackend SearchBackend { get; set; } = SearchBackend.None;
 
     public FunctionOption Clone()
     {
@@ -39,7 +55,8 @@ public sealed class FunctionOption
             Glyph = Glyph,
             SystemPrompt = SystemPrompt,
             IconOffsetX = IconOffsetX,
-            IconOffsetY = IconOffsetY
+            IconOffsetY = IconOffsetY,
+            SearchBackend = SearchBackend
         };
     }
 }
@@ -121,6 +138,13 @@ public sealed class AppConfig
     public List<FunctionOption> Functions { get; set; } = [];
     public string SelectedProviderId { get; set; } = string.Empty;
     public string TavilyApiKeyProtected { get; set; } = string.Empty;
+    public string ZhihuAccessSecretProtected { get; set; } = string.Empty;
+
+    // 把默认的三个检索项并成「联网检索」只做一次：做过之后用户自行增删都不再被改动。
+    public bool FunctionSetConsolidated { get; set; }
+
+    // 「回答」与「解释」合并成一项，同样只做一次。
+    public bool AnswerExplainMerged { get; set; }
     public bool KeepWindowOnTop { get; set; } = true;
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
@@ -131,6 +155,29 @@ public sealed class AppConfig
     public string OpenAiBaseUri { get; set; } = "https://api.openai.com/v1";
     public string Model { get; set; } = "gpt-4.1-mini";
     public string OpenAiApiKeyProtected { get; set; } = string.Empty;
+
+    // 设置窗口编辑副本用：让「取消」不污染正在使用的配置对象。
+    public AppConfig Clone()
+    {
+        return new AppConfig
+        {
+            Providers = Providers.Select(provider => provider.Clone()).ToList(),
+            Functions = Functions.Select(function => function.Clone()).ToList(),
+            SelectedProviderId = SelectedProviderId,
+            TavilyApiKeyProtected = TavilyApiKeyProtected,
+            ZhihuAccessSecretProtected = ZhihuAccessSecretProtected,
+            FunctionSetConsolidated = FunctionSetConsolidated,
+            AnswerExplainMerged = AnswerExplainMerged,
+            KeepWindowOnTop = KeepWindowOnTop,
+            HideWhenDeactivated = HideWhenDeactivated,
+            AutoFillSelectedText = AutoFillSelectedText,
+            StartWithWindows = StartWithWindows,
+            ScreenshotHotkeyEnabled = ScreenshotHotkeyEnabled,
+            OpenAiBaseUri = OpenAiBaseUri,
+            Model = Model,
+            OpenAiApiKeyProtected = OpenAiApiKeyProtected
+        };
+    }
 }
 
 public sealed class HistoryEntry

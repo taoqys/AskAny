@@ -8,14 +8,18 @@ AskAny 是一个使用 WPF 和 .NET 8 构建的 Windows AI 快捷助手。双击
 - 双击 `Ctrl` 可在任意界面直接区域截图，框选后自动弹出面板并附上图片
 - 窗口会跟随当前鼠标位置显示，并自动选择不超出屏幕的最近位置
 - `↑` / `↓` 选择功能，`Enter` 提交，`Esc` 隐藏，`Ctrl + Enter` 也可提交
-- 内置回答问题、解释说明、新闻追踪、深度思考和联网解释，可新增、删除、排序并改名
+- 回答以流式方式边生成边显示；提供商不支持流式时自动回退到一次性返回
+- 请求进行中按 `Esc` 可取消；请求失败会按认证 / 限流 / 模型不存在 / 服务端错误分别给出下一步
+- 内置回答、深度思考和联网检索，可新增、删除、排序并改名
+- 「回答」涵盖直接作答与解释说明（两者原本只差一段提示词），可自行改写提示词
+- 「联网检索」把三个检索来源合并成一项，选中后用 `PgUp` / `PgDn` 循环切换，或 `Alt + 1` / `2` / `3` 直达
 - 每个功能选项都可以单独编辑系统提示词、图标和执行方式
 - 支持多个 OpenAI Chat Completions / Responses API 提供商
 - 内置 OpenAI、OpenAI Responses 和 DeepSeek Responses 预设
 - 主窗口底部可直接切换提供商和模型，模型名称也可以手动输入
 - 仅“深度思考”请求扩展推理；支持推理控制的提供商会在其他模式显式关闭推理
-- 支持 Tavily Search API，用于新闻追踪和联网解释
-- 自动捕获当前窗口中选中的文字，并填入问题输入框
+- 支持 Tavily 检索（全网 / 新闻两个 topic）与知乎开放平台站内检索，只做检索，回答仍由当前选中的模型生成
+- 自动捕获当前窗口中选中的文字，并填入问题输入框；浏览器页面（X、知乎等）同样支持
 - 支持区域截图、选择本地图片、剪贴板粘贴和拖放图片后提问
 - 图片会按模型能力校验，当前模型不支持图片时不会静默发送文字
 - 窗口失去焦点后自动隐藏
@@ -39,14 +43,21 @@ AskAny 是一个使用 WPF 和 .NET 8 构建的 Windows AI 快捷助手。双击
 2. 填写接口地址、API Key 和模型列表
 3. 选择 Chat Completions 或 Responses API 协议
 4. 对支持推理控制的提供商设置推理强度
-5. 如需“新闻追踪”或“联网解释”，填写 Tavily API Key
-6. 在“功能选项”中管理主窗口的功能列表和对应的系统提示词
-7. 在“模型服务”中填写支持图片输入的模型列表
-8. 点击“测试连接”验证配置，然后保存
+5. 如需「联网检索」的 全网 / 新闻 来源，填写 Tavily API Key
+6. 如需「联网检索」的 知乎 来源，填写知乎开放平台的 Access Secret
+7. 在“功能选项”中管理主窗口的功能列表、执行方式、检索来源和系统提示词
+8. 在“模型服务”中填写支持图片输入的模型列表
+9. 点击“测试连接”验证配置，然后保存
 
 DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的 `reasoning.effort` 规则：深度思考模式使用配置的强度，其他模式显式发送 `none`，避免默认开启思考。
 
-配置保存在 `%APPDATA%\AskAny\config.json`，历史记录保存在 `%APPDATA%\AskAny\history.json`。密钥字段使用 Windows DPAPI 加密。
+知乎搜索调用 `https://developer.zhihu.com/api/v1/content/zhihu_search`，需要 Bearer 鉴权加秒级时间戳，单次最多返回 10 条。时间戳与服务端相差超过 10 分钟会返回 20001，因此本机时间需要准确。
+
+配置保存在 `%APPDATA%\AskAny\config.json`，历史记录保存在 `%APPDATA%\AskAny\history.json`。密钥字段使用 Windows DPAPI 加密。运行期异常写入 `%APPDATA%\AskAny\error.log`（超过 256KB 轮转一次），可从托盘菜单打开。
+
+全局键盘钩子可能被系统摘掉（回调超时），且不会有任何通知。程序每 30 分钟自动重装一次以自愈，托盘菜单也提供「重新注册全局快捷键」；注册失败会记日志并弹出托盘提示。
+
+选区捕获按三层依次尝试：焦点元素及其祖先、前台窗口内的 Document（浏览器把页面内容挂在这里）、最后对浏览器窗口模拟一次 `Ctrl+C` 兜底。后两层用 `GetForegroundWindow` 定位窗口，不依赖 UI Automation 的父链遍历。兜底只在浏览器窗口启用，并且会用剪贴板序列号确认「确实发生了复制」——没有选区时不会把剪贴板里的旧内容填进输入框；捕获后会尽量还原原来的剪贴板内容。
 
 ## 键盘操作
 
@@ -56,19 +67,24 @@ DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的
 | 双击 `Ctrl` | 全局区域截图（任意界面可用） |
 | `↑` / `↓` | 选择 AI 功能 |
 | `Enter` | 执行当前功能 |
+| `Alt + 1` / `2` / `3` | 选中「联网检索」时直达来源：全网 / 新闻 / 知乎 |
+| `PgUp` / `PgDn` | 选中「联网检索」时循环切换来源 |
 | 回答后按 `Enter` | 输入下一轮追问 |
 | 回答后按 `←` | 返回功能列表 |
 | `Ctrl + Enter` | 执行当前功能 |
 | `Ctrl + V` | 将剪贴板图片加入附件 |
 | `Ctrl + Shift + A` | 区域截图并加入附件 |
-| `Esc` | 隐藏窗口 |
+| `Esc` | 隐藏窗口；请求进行中改为取消当前请求 |
 
 ## 构建
 
 ```powershell
 dotnet restore AskAny.sln
 dotnet build AskAny.sln -c Release
+dotnet test AskAny.sln -c Release
 dotnet publish src/AskAny/AskAny.csproj -c Release -r win-x64 --self-contained false
 ```
 
-GitHub Actions 会在 Windows 上完成还原、构建和发布打包。
+GitHub Actions 会在 Windows 上完成还原、构建、测试和发布打包。
+
+测试覆盖不需要启动界面的纯逻辑：配置迁移（三步迁移各自的分支与幂等性）、默认功能集、`AppConfig.Clone` 的深拷贝语义、两种协议的响应解析与请求构造、Tavily / 知乎检索的信封解析与错误码。服务类通过注入假的 `HttpMessageHandler` 驱动真实的请求构造与解析代码，不需要网络和真实密钥。

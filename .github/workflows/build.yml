@@ -29,6 +29,9 @@ jobs:
       - name: Build
         run: dotnet build AskAny.sln --configuration Release --no-restore
 
+      - name: Test
+        run: dotnet test AskAny.sln --configuration Release --no-build --verbosity normal
+
       - name: Publish
         run: dotnet publish src/AskAny/AskAny.csproj --configuration Release --runtime win-x64 --self-contained false --output artifacts/AskAny
 
@@ -44,7 +47,8 @@ jobs:
             @{ Path = "artifacts/ui/settings-search.png"; Arguments = @("--screenshot-settings", "artifacts/ui/settings-search.png", "2") },
             @{ Path = "artifacts/ui/settings-window.png"; Arguments = @("--screenshot-settings", "artifacts/ui/settings-window.png", "3") },
             @{ Path = "artifacts/ui/markdown-preview.png"; Arguments = @("--screenshot-markdown", "artifacts/ui/markdown-preview.png") },
-            @{ Path = "artifacts/ui/main.png"; Arguments = @("--screenshot", "artifacts/ui/main.png") }
+            @{ Path = "artifacts/ui/main.png"; Arguments = @("--screenshot", "artifacts/ui/main.png") },
+            @{ Path = "artifacts/ui/main-network.png"; Arguments = @("--screenshot", "artifacts/ui/main-network.png", "2") }
           )
           foreach ($capture in $captures) {
             $process = Start-Process `

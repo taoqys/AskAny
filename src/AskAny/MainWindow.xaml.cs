@@ -39,6 +39,25 @@ public partial class MainWindow : Window
     private bool _isCapturingScreenshot;
     private string _lastAnswer = string.Empty;
 
+    // 流式渲染：读流在线程池上跑，只往缓冲区追加；界面按固定间隔统一重排。
+    private readonly object _streamGate = new();
+    private readonly StringBuilder _streamingContent = new();
+    private readonly StringBuilder _streamingReasoning = new();
+    private DispatcherTimer _streamRenderTimer = null!;
+    private bool _streamDirty;
+
+    // 当前进行中请求的取消源：Esc 用它中断。
+    private CancellationTokenSource? _requestCancellation;
+
+    // 用户取消与「请求超时」都是 OperationCanceledException，必须区分。
+    // 注意：内层 finally 会在异常继续上抛之前把 _requestCancellation 置空，
+    // 所以不能在 catch 过滤器里读它，只能提前把结论记下来。
+    private bool _lastRequestCancelledByUser;
+
+    // 多轮上下文上限：约 6 轮问答，且总字数不超过 24k。
+    private const int MaxConversationTurns = 12;
+    private const int MaxConversationCharacters = 24_000;
+
     public MainWindow(
         ConfigService configService,
         AiService aiService,
@@ -57,11 +76,35 @@ public partial class MainWindow : Window
         AttachmentItems.ItemsSource = _pendingAttachments;
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+
+        _streamRenderTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(120)
+        };
+        _streamRenderTimer.Tick += (_, _) => RenderStreamingDraft();
     }
+
+    // 截图预览要等初次加载完成再渲染，否则截到的是「加载前」状态。
+    private readonly TaskCompletionSource _initialLoadCompletion =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Task InitialLoadCompleted => _initialLoadCompletion.Task;
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
-        await LoadConfigurationAsync();
+        try
+        {
+            await LoadConfigurationAsync();
+        }
+        catch (Exception exception)
+        {
+            // 配置读取失败不该弹模态框挡住界面，记日志即可。
+            ErrorLog.Write("加载配置", exception);
+        }
+        finally
+        {
+            _initialLoadCompletion.TrySetResult();
+        }
     }
 
     private async Task LoadConfigurationAsync()
@@ -77,7 +120,6 @@ public partial class MainWindow : Window
         RefreshModelChoices();
 
         Topmost = _config.KeepWindowOnTop;
-        UpdatePinButton();
     }
 
     public void ShowFromHotkey(string? selectedText = null)
@@ -148,13 +190,70 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
+    // 截图预览用（与 SettingsWindow.PreviewTabIndex 同一思路）：让 CI 能截到
+    // 选中「联网检索」时的界面，否则来源切换条永远没机会出现在截图里。
+    public int PreviewFunctionIndex
+    {
+        set
+        {
+            if (_functions.Count == 0)
+            {
+                return;
+            }
+
+            FunctionList.SelectedIndex = Math.Clamp(value, 0, _functions.Count - 1);
+            FunctionList.ScrollIntoView(FunctionList.SelectedItem);
+            RefreshSourceStrip();
+        }
+    }
+
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
-            Hide();
+            // 请求进行中按 Esc = 取消请求（而不是把窗口藏起来、让请求继续跑并继续计费）。
+            // 空闲时仍然是隐藏窗口，保持原有习惯。
+            if (_isRunning && _requestCancellation is { } cancellation)
+            {
+                StatusText.Text = "正在取消…";
+                cancellation.Cancel();
+            }
+            else
+            {
+                Hide();
+            }
+
             e.Handled = true;
             return;
+        }
+
+        // PgUp / PgDn 循环切换来源：不用记数字映射，两个大键盲按也能命中。
+        // 仅在来源条可见（选中检索类功能）时接管，否则交还给列表滚动。
+        if ((e.Key is Key.PageUp or Key.PageDown) &&
+            SourceStrip.Visibility == Visibility.Visible)
+        {
+            CycleSearchBackend(e.Key == Key.PageDown ? 1 : -1);
+            e.Handled = true;
+            return;
+        }
+
+        // Alt+1/2/3 直接切到指定来源。按着 Alt 时 WPF 把按键放在 SystemKey 上、
+        // 而 Key 只会是 Key.System，所以这里必须读 SystemKey，否则永远匹配不上。
+        if (e.Key == Key.System && Keyboard.Modifiers.HasFlag(ModifierKeys.Alt))
+        {
+            var source = e.SystemKey switch
+            {
+                Key.D1 or Key.NumPad1 => SearchBackend.TavilyGeneral,
+                Key.D2 or Key.NumPad2 => SearchBackend.TavilyNews,
+                Key.D3 or Key.NumPad3 => SearchBackend.Zhihu,
+                _ => SearchBackend.None
+            };
+
+            if (source != SearchBackend.None && TrySetSearchBackend(source))
+            {
+                e.Handled = true;
+                return;
+            }
         }
 
         if (e.Key == Key.V &&
@@ -173,7 +272,7 @@ public partial class MainWindow : Window
             Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
             e.Handled = true;
-            _ = CaptureRegionAsync();
+            SafeTask.Run(() => CaptureRegionAsync(), "区域截图", message => StatusText.Text = message);
             return;
         }
 
@@ -230,7 +329,7 @@ public partial class MainWindow : Window
             if (PromptEditorBorder.Visibility == Visibility.Visible)
             {
                 CommitModelSelection();
-                _ = ExecuteSelectedAsync();
+                SafeTask.Run(() => ExecuteSelectedAsync(), "执行请求", message => StatusText.Text = message);
             }
 
             e.Handled = true;
@@ -524,6 +623,7 @@ public partial class MainWindow : Window
         IReadOnlyList<ImageAttachment> images)
     {
         _isRunning = true;
+        _lastRequestCancelledByUser = false;
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
@@ -531,9 +631,12 @@ public partial class MainWindow : Window
         ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
         SetOutputMarkdown(
-            option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline
-                ? "正在检索网络资料…"
-                : "正在生成回答…",
+            option.SearchBackend switch
+            {
+                SearchBackend.Zhihu => "正在检索知乎…",
+                SearchBackend.None => "正在生成回答…",
+                _ => "正在检索网络资料…"
+            },
             null);
         StatusText.Text = "正在执行";
 
@@ -542,33 +645,26 @@ public partial class MainWindow : Window
 
         try
         {
-            if (option.Mode is WorkflowMode.TrackNews or WorkflowMode.ExplainOnline)
+            // 检索与否完全由 SearchBackend 决定，不再看 Mode：
+            // 「联网检索」把三个来源合并成一项后，Mode 只负责提示词与是否推理。
+            if (option.SearchBackend != SearchBackend.None)
             {
-                var tavilyKey = ConfigService.Unprotect(_config.TavilyApiKeyProtected);
-                search = await _searchService.SearchAsync(
-                    prompt,
-                    option.Mode == WorkflowMode.TrackNews,
-                    tavilyKey);
-
+                search = await SearchByBackendAsync(option.SearchBackend, prompt);
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
             }
 
-            var result = await _aiService.ExecuteAsync(
-                option,
-                prompt,
-                provider,
-                ConfigService.Unprotect(provider.ApiKeyProtected),
-                search,
-                images,
-                _conversation.ToArray());
+            var result = await ExecuteWithStreamingAsync(option, prompt, provider, search, images);
 
             var displayAnswer = AppendSources(result.Answer, search);
             var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
             _lastAnswer = displayAnswer;
             SetOutputMarkdown(displayAnswer, reasoning);
-            _conversation.Add(new ConversationTurn("user", prompt, images));
+            // 不把图片放进会话：历史轮次不再重发图片（见 AiService 的说明），
+            // 存着只会白占内存。
+            _conversation.Add(new ConversationTurn("user", prompt));
             _conversation.Add(new ConversationTurn("assistant", result.Answer));
+            TrimConversation();
             stopwatch.Stop();
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
             ResponseMetaText.Text =
@@ -589,9 +685,17 @@ public partial class MainWindow : Window
                 SourceCount = search?.Sources.Count ?? 0
             });
         }
-        catch (Exception exception) when (
-            exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (OperationCanceledException) when (_lastRequestCancelledByUser)
         {
+            _lastAnswer = "已取消";
+            SetOutputMarkdown("## 已取消\n\n请求已取消。", null);
+            ResponseMetaText.Text = "已取消";
+            StatusText.Text = "已取消";
+        }
+        catch (Exception exception)
+        {
+            // 不按异常类型过滤：畸形地址（UriFormatException）或返回 HTML（JsonException）
+            // 原本会漏出这个 catch，用户看不到任何提示，界面停在「正在生成回答…」。
             var error = exception is TaskCanceledException
                 ? "请求超时，请稍后重试。"
                 : exception.Message;
@@ -604,6 +708,259 @@ public partial class MainWindow : Window
         {
             BusyProgress.Visibility = Visibility.Collapsed;
             _isRunning = false;
+        }
+    }
+
+    private Task<SearchPacket> SearchByBackendAsync(SearchBackend source, string prompt)
+    {
+        if (source == SearchBackend.Zhihu)
+        {
+            return _searchService.SearchZhihuAsync(
+                prompt,
+                ConfigService.Unprotect(_config.ZhihuAccessSecretProtected));
+        }
+
+        return _searchService.SearchAsync(
+            prompt,
+            source == SearchBackend.TavilyNews,
+            ConfigService.Unprotect(_config.TavilyApiKeyProtected));
+    }
+
+    private static bool IsSearchFunction(FunctionOption function)
+    {
+        return function.Mode == WorkflowMode.SearchNetwork ||
+               function.SearchBackend != SearchBackend.None;
+    }
+
+    // 只有选中检索类功能时才显示来源切换条；其余功能没有可切换的来源。
+    private void RefreshSourceStrip()
+    {
+        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        {
+            SourceStrip.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SourceStrip.Visibility = Visibility.Visible;
+        ApplySourceChip(SourceGeneralChip, option.SearchBackend == SearchBackend.TavilyGeneral);
+        ApplySourceChip(SourceNewsChip, option.SearchBackend == SearchBackend.TavilyNews);
+        ApplySourceChip(SourceZhihuChip, option.SearchBackend == SearchBackend.Zhihu);
+    }
+
+    private void ApplySourceChip(Button chip, bool isActive)
+    {
+        chip.Background = isActive
+            ? (Brush)FindResource("AccentSoftBrush")
+            : Brushes.Transparent;
+        chip.Foreground = isActive
+            ? (Brush)FindResource("AccentBrush")
+            : (Brush)FindResource("MutedBrush");
+        chip.FontWeight = isActive ? FontWeights.SemiBold : FontWeights.Normal;
+    }
+
+    private void SourceChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag } &&
+            Enum.TryParse<SearchBackend>(tag, out var source))
+        {
+            TrySetSearchBackend(source);
+        }
+    }
+
+    // 来源固定顺序循环，PgUp / PgDn 用；顺序与来源条上从左到右一致。
+    private static readonly SearchBackend[] SearchBackendCycle =
+    [
+        SearchBackend.TavilyGeneral,
+        SearchBackend.TavilyNews,
+        SearchBackend.Zhihu
+    ];
+
+    private void CycleSearchBackend(int offset)
+    {
+        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        {
+            return;
+        }
+
+        var current = Array.IndexOf(SearchBackendCycle, option.SearchBackend);
+        var next = current < 0
+            ? 0
+            : ((current + offset) % SearchBackendCycle.Length + SearchBackendCycle.Length)
+              % SearchBackendCycle.Length;
+        TrySetSearchBackend(SearchBackendCycle[next]);
+    }
+
+    private bool TrySetSearchBackend(SearchBackend source)
+    {
+        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        {
+            return false;
+        }
+
+        if (option.SearchBackend == source)
+        {
+            return true;
+        }
+
+        option.SearchBackend = source;
+        RefreshSourceStrip();
+
+        // _functions 是 _config.Functions 的编辑副本，改动必须同步回配置才会持久化。
+        _config.Functions = _functions.Select(function => function.Clone()).ToList();
+        SaveConfigInBackground();
+        return true;
+    }
+
+    // 模型切换等操作后要落盘，但保存失败必须让用户看见 —— 否则会以为设置已经生效。
+    private void SaveConfigInBackground()
+    {
+        SafeTask.Run(
+            () => _configService.SaveAsync(_config),
+            "保存配置",
+            message => StatusText.Text = message);
+    }
+
+    // 流式：读流放在线程池上，分片只往缓冲区里追加；渲染交给定时器节流。
+    // 每个分片都重排一次 Markdown 会把界面拖垮，所以按固定间隔统一渲染。
+    private async Task<AiResult> ExecuteWithStreamingAsync(
+        FunctionOption option,
+        string prompt,
+        ProviderConfig provider,
+        SearchPacket? search,
+        IReadOnlyList<ImageAttachment> images)
+    {
+        var apiKey = ConfigService.Unprotect(provider.ApiKeyProtected);
+        var conversation = _conversation.ToArray();
+
+        using var cancellation = new CancellationTokenSource();
+        _requestCancellation = cancellation;
+
+        lock (_streamGate)
+        {
+            _streamingContent.Clear();
+            _streamingReasoning.Clear();
+            _streamDirty = false;
+        }
+
+        StartStreamTimer();
+
+        try
+        {
+            return await Task.Run(() => _aiService.ExecuteStreamingAsync(
+                option,
+                prompt,
+                provider,
+                apiKey,
+                search,
+                images,
+                conversation,
+                OnStreamDelta,
+                cancellation.Token));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // 不同提供商/代理对 SSE 的支持程度不一致，流式失败必须退回非流式，
+            // 否则「支持流式」本身会变成新的失败点。
+            ErrorLog.Write("流式请求失败，回退到非流式", exception);
+
+            lock (_streamGate)
+            {
+                _streamingContent.Clear();
+                _streamingReasoning.Clear();
+                _streamDirty = false;
+            }
+
+            return await _aiService.ExecuteAsync(
+                option,
+                prompt,
+                provider,
+                apiKey,
+                search,
+                images,
+                conversation,
+                cancellation.Token);
+        }
+        finally
+        {
+            StopStreamTimer();
+            _lastRequestCancelledByUser = cancellation.IsCancellationRequested;
+            _requestCancellation = null;
+        }
+    }
+
+    // 此方法在线程池线程上被调用，只做追加，不碰任何界面对象。
+    private void OnStreamDelta(string content, string reasoning)
+    {
+        lock (_streamGate)
+        {
+            if (content.Length > 0)
+            {
+                _streamingContent.Append(content);
+            }
+
+            if (reasoning.Length > 0)
+            {
+                _streamingReasoning.Append(reasoning);
+            }
+
+            _streamDirty = true;
+        }
+    }
+
+    private void StartStreamTimer()
+    {
+        _streamRenderTimer.Start();
+    }
+
+    private void StopStreamTimer()
+    {
+        _streamRenderTimer.Stop();
+    }
+
+    private void RenderStreamingDraft()
+    {
+        string content;
+        string reasoning;
+
+        lock (_streamGate)
+        {
+            if (!_streamDirty)
+            {
+                return;
+            }
+
+            _streamDirty = false;
+            content = _streamingContent.ToString();
+            reasoning = _streamingReasoning.ToString();
+        }
+
+        ResponseMetaText.Text = $"正在生成… {content.Length} 字";
+        SetOutputMarkdown(
+            content.Length == 0 ? "正在生成回答…" : content,
+            reasoning.Length == 0 ? null : reasoning);
+        // 生成过程中让视线跟着最新内容走；完成后 SetOutputMarkdown 会回到开头。
+        OutputRichText.ScrollToEnd();
+    }
+
+    // 多轮上下文不能无限增长：token 线性上涨，迟早撞上下文上限或超时。
+    // 按轮数与总字数双重限制，并且保证裁剪后第一条是 user ——
+    // 从中间截断会让某轮 assistant 没有对应的提问，部分提供商会直接拒绝这种序列。
+    private void TrimConversation()
+    {
+        while (_conversation.Count > MaxConversationTurns)
+        {
+            _conversation.RemoveAt(0);
+        }
+
+        while (_conversation.Count > 2 &&
+               _conversation.Sum(turn => turn.Content.Length) > MaxConversationCharacters)
+        {
+            _conversation.RemoveAt(0);
+        }
+
+        while (_conversation.Count > 0 && _conversation[0].Role != "user")
+        {
+            _conversation.RemoveAt(0);
         }
     }
 
@@ -641,12 +998,10 @@ public partial class MainWindow : Window
         for (var index = 0; index < search.Sources.Count; index++)
         {
             var source = search.Sources[index];
-            var title = source.Title
-                .Replace("[", "\\[", StringComparison.Ordinal)
-                .Replace("]", "\\]", StringComparison.Ordinal);
+            var title = SanitizeSourceTitle(source.Title);
             var label = string.IsNullOrWhiteSpace(source.Url)
                 ? title
-                : $"[{title}]({source.Url})";
+                : $"[{title}](<{source.Url}>)";
             builder.Append(index + 1)
                 .Append(". ")
                 .Append(label);
@@ -660,6 +1015,26 @@ public partial class MainWindow : Window
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    // 来源标题直接来自检索结果，可能含换行、方括号、井号。
+    // 换行会让标题跑出列表项、井号在行首会变成标题，都必须清掉；
+    // 链接地址则用尖括号包裹，否则地址里出现 ) 会提前截断链接。
+    private static string SanitizeSourceTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return "未命名来源";
+        }
+
+        var flattened = title.ReplaceLineEndings(" ").Trim();
+
+        return flattened
+            .Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("[", "\\[", StringComparison.Ordinal)
+            .Replace("]", "\\]", StringComparison.Ordinal)
+            .TrimStart('#')
+            .Trim();
     }
 
     private void PromptBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -912,6 +1287,8 @@ public partial class MainWindow : Window
         {
             StatusText.Text = $"已选择：{option.Name}，Enter 执行";
         }
+
+        RefreshSourceStrip();
     }
 
     private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -962,7 +1339,7 @@ public partial class MainWindow : Window
         provider.SelectedModel = typedValue;
         _config.SelectedProviderId = provider.Id;
         RefreshModelChoices();
-        _ = _configService.SaveAsync(_config);
+        SaveConfigInBackground();
     }
 
     private void RefreshModelChoices()
@@ -1004,7 +1381,7 @@ public partial class MainWindow : Window
         choice.Provider.SelectedModel = choice.Model;
         _config.SelectedProviderId = choice.Provider.Id;
         UpdateAttachmentTargetText();
-        _ = _configService.SaveAsync(_config);
+        SaveConfigInBackground();
     }
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -1019,7 +1396,13 @@ public partial class MainWindow : Window
 
         try
         {
-            var settings = new SettingsWindow(_configService, _config, _aiService)
+            // 传副本：设置窗口直接写传入对象，传本体的话点「取消」也会污染正在使用的配置。
+            // 保存成功后由 LoadConfigurationAsync 从磁盘重新读回。
+            var settings = new SettingsWindow(
+                _configService,
+                _config.Clone(),
+                _aiService,
+                _searchService)
             {
                 Owner = this
             };
@@ -1071,11 +1454,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HideButton_Click(object sender, RoutedEventArgs e)
-    {
-        Hide();
-    }
-
     private void BackButton_Click(object sender, RoutedEventArgs e)
     {
         ShowWorkflowList();
@@ -1117,8 +1495,22 @@ public partial class MainWindow : Window
         PromptRowDefinition.Height = GridLength.Auto;
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        SelectFirstFunction();
+        RefreshSourceStrip();
         ClearPendingAttachments();
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
+    }
+
+    // 每次唤起都把功能列表重置回第一项，避免沿用上次用过的功能被 Enter 误执行。
+    private void SelectFirstFunction()
+    {
+        if (FunctionList.Items.Count == 0)
+        {
+            return;
+        }
+
+        FunctionList.SelectedIndex = 0;
+        FunctionList.ScrollIntoView(FunctionList.SelectedItem);
     }
 
     private void RefreshFunctions()
@@ -1133,6 +1525,7 @@ public partial class MainWindow : Window
         FunctionList.SelectedItem = _functions.FirstOrDefault(
                                         function => function.Id == selectedId)
                                     ?? _functions.FirstOrDefault();
+        RefreshSourceStrip();
     }
 
     private void SetResponsePromptDisplay(string prompt, int imageCount)
@@ -1215,23 +1608,18 @@ public partial class MainWindow : Window
         return (cleaned.Length > 40 ? cleaned[..40] : cleaned) + ".md";
     }
 
-    private async void PinButton_Click(object sender, RoutedEventArgs e)
+    // 1A：整行单击直接执行。此前行尾的 ▶ 只是装饰 TextBlock，点行只选中、不执行，
+    // 视觉承诺和实际行为对不上；现在整行就是执行入口，▶ 改为悬停时淡入提示。
+    private void FunctionItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        _config.KeepWindowOnTop = !_config.KeepWindowOnTop;
-        Topmost = _config.KeepWindowOnTop;
-        UpdatePinButton();
-        await _configService.SaveAsync(_config);
-    }
+        if (sender is not ListBoxItem item || item.DataContext is not FunctionOption)
+        {
+            return;
+        }
 
-    private void ExitButton_Click(object sender, RoutedEventArgs e)
-    {
-        RequestExit();
-    }
-
-    private void UpdatePinButton()
-    {
-        PinGlyph.Text = _config.KeepWindowOnTop ? "\uE77A" : "\uE77B";
-        PinButton.ToolTip = _config.KeepWindowOnTop ? "取消窗口置顶" : "固定窗口置顶";
+        e.Handled = true;
+        FunctionList.SelectedItem = item.DataContext;
+        SafeTask.Run(() => ExecuteSelectedAsync(), "执行请求", message => StatusText.Text = message);
     }
 
     private void MainWindow_Closing(object? sender, CancelEventArgs e)

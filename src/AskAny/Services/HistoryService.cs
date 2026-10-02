@@ -5,11 +5,30 @@ namespace AskAny.Services;
 public sealed class HistoryService
 {
     private const int MaximumEntries = 200;
+
+    // 历史文件每次新增都是「读全量 → 插入 → 写全量」，单条太长会让文件迅速膨胀
+    // （实测一份 98 条的历史已有 559KB）。这里对单条长度设上限。
+    private const int MaximumPromptLength = 4_000;
+    private const int MaximumResponseLength = 20_000;
+    private const string TruncationMarker = "\n\n…（内容过长，已截断）";
+
     private readonly string _historyPath;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public HistoryService()
+        : this(null)
     {
+    }
+
+    // 传入路径时从该文件读写，便于测试；默认仍是 %APPDATA%\AskAny\history.json。
+    public HistoryService(string? historyPath)
+    {
+        if (!string.IsNullOrWhiteSpace(historyPath))
+        {
+            _historyPath = historyPath;
+            return;
+        }
+
         var directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "AskAny");
@@ -52,6 +71,9 @@ public sealed class HistoryService
         try
         {
             var entries = await ReadWithoutLockAsync(cancellationToken);
+            entry.Prompt = Truncate(entry.Prompt, MaximumPromptLength);
+            entry.Response = Truncate(entry.Response, MaximumResponseLength);
+            entry.Reasoning = Truncate(entry.Reasoning, MaximumResponseLength);
             entries.Insert(0, entry);
             if (entries.Count > MaximumEntries)
             {
@@ -92,6 +114,16 @@ public sealed class HistoryService
         {
             _gate.Release();
         }
+    }
+
+    private static string Truncate(string value, int maximumLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maximumLength)
+        {
+            return value;
+        }
+
+        return value[..maximumLength] + TruncationMarker;
     }
 
     private async Task<List<HistoryEntry>> ReadWithoutLockAsync(CancellationToken cancellationToken)

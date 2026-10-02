@@ -36,6 +36,7 @@
                 <RowDefinition x:Name="PromptRowDefinition" Height="Auto" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="48" />
             </Grid.RowDefinitions>
 
@@ -56,6 +57,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <!-- 显式指定 LineHeight + BlockLineHeight + Ideal 排版，与功能行图标一致，
+                     让字形位置可预测；否则 Segoe MDL2 按自身行框排布，实测偏高 3.5px。 -->
                 <TextBlock Width="24"
                            Height="24"
                            HorizontalAlignment="Center"
@@ -63,8 +66,18 @@
                            FontFamily="Segoe MDL2 Assets"
                            FontSize="16"
                            Foreground="#6E737C"
+                           LineHeight="24"
+                           LineStackingStrategy="BlockLineHeight"
                            Text="&#xE721;"
-                           TextAlignment="Center" />
+                           TextAlignment="Center"
+                           TextOptions.TextFormattingMode="Ideal">
+                    <!-- BlockLineHeight 会把字形压到行框底部，按截图像素测量回正。
+                         取整数 -5 而不是 -4.5：既正好落在单元格中心，又避免半像素偏移带来的模糊。
+                         功能行图标用的是同一套偏移思路。 -->
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform Y="-5" />
+                    </TextBlock.RenderTransform>
+                </TextBlock>
 
                 <Grid Grid.Column="1" Margin="6,0,4,0">
                     <Border x:Name="PromptEditorBorder"
@@ -76,6 +89,8 @@
                             Drop="Input_Drop">
                         <Grid>
                             <TextBox x:Name="PromptBox"
+                                     AutomationProperties.AutomationId="PromptBox"
+                                     AutomationProperties.Name="问题输入框"
                                      MinHeight="44"
                                      Padding="3,5,3,4"
                                      VerticalContentAlignment="Center"
@@ -112,26 +127,14 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
                     <Button x:Name="AttachmentButton"
+                            AutomationProperties.AutomationId="AttachmentButton"
+                            AutomationProperties.Name="添加图片"
                             Style="{StaticResource IconButton}"
                             ToolTip="添加图片（双击 Ctrl 区域截图 · Ctrl+V 粘贴 · 拖入图片）"
                             Click="AttachmentButton_Click">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
                                    FontSize="16"
                                    Text="&#xE8B9;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            ToolTip="设置（F1）"
-                            Click="SettingsButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="16"
-                                   Text="&#xE713;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            ToolTip="隐藏窗口（Esc）"
-                            Click="HideButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="15"
-                                   Text="&#xE711;" />
                     </Button>
                 </StackPanel>
 
@@ -203,11 +206,16 @@
                          Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="FunctionList"
+                         AutomationProperties.Name="功能列表"
                          SelectionChanged="FunctionList_SelectionChanged">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="Focusable" Value="False" />
+                            <!-- 1A：整行单击直接执行，兑现行尾 ▶ 的视觉承诺。 -->
+                            <EventSetter Event="MouseLeftButtonUp"
+                                         Handler="FunctionItem_MouseLeftButtonUp" />
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
@@ -275,14 +283,24 @@
                                            FontWeight="SemiBold"
                                            Foreground="{StaticResource InkBrush}"
                                            Text="{Binding Name}" />
-                                <TextBlock Grid.Column="2"
+                                <TextBlock x:Name="RowRunHint"
+                                           Grid.Column="2"
                                            Margin="8,0,4,0"
                                            VerticalAlignment="Center"
                                            FontFamily="Segoe MDL2 Assets"
                                            FontSize="13"
                                            Foreground="#A4A5AA"
+                                           Opacity="0"
                                            Text="&#xE724;" />
                             </Grid>
+                            <DataTemplate.Triggers>
+                                <!-- 箭头只在鼠标悬停时淡入：静态时 6 行都挂一个箭头是纯噪点，
+                                     而它现在是真的"点这里就执行"，悬停出现才有意义。 -->
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                             Value="True">
+                                    <Setter TargetName="RowRunHint" Property="Opacity" Value="1" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -376,6 +394,8 @@
                             CornerRadius="7">
                         <Grid>
                             <RichTextBox x:Name="OutputRichText"
+                                         AutomationProperties.AutomationId="OutputRichText"
+                                         AutomationProperties.Name="回答内容"
                                          Margin="12"
                                          Padding="0"
                                          IsReadOnly="True"
@@ -397,10 +417,48 @@
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="3" Margin="10,0,8,0">
+            <!-- 来源切换条：只有选中检索类功能时才出现，「联网检索」用它覆盖原来的
+                 联网解释 / 新闻追踪 / 知乎搜索三个来源。独立占一行，避免功能多时盖住列表。 -->
+            <StackPanel x:Name="SourceStrip"
+                        Grid.Row="3"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="14,0,14,8"
+                        Visibility="Collapsed">
+                <TextBlock VerticalAlignment="Center"
+                           Margin="0,0,7,0"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="来源" />
+                <Button x:Name="SourceGeneralChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="TavilyGeneral"
+                        ToolTip="Tavily 全网搜索（Alt+1）"
+                        Content="全网"
+                        Click="SourceChip_Click" />
+                <Button x:Name="SourceNewsChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="TavilyNews"
+                        ToolTip="Tavily 新闻：偏向主流媒体的实时报道（Alt+2）"
+                        Content="新闻"
+                        Click="SourceChip_Click" />
+                <Button x:Name="SourceZhihuChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="Zhihu"
+                        ToolTip="知乎站内检索，需要 Access Secret（Alt+3）"
+                        Content="知乎"
+                        Click="SourceChip_Click" />
+                <TextBlock VerticalAlignment="Center"
+                           Margin="6,0,0,0"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="PgUp/PgDn 循环 · Alt+1/2/3 直达" />
+            </StackPanel>
+
+            <Grid Grid.Row="4" Margin="10,0,8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -440,6 +498,8 @@
                            Foreground="{StaticResource MutedBrush}"
                            Text="模型" />
                 <ComboBox x:Name="ModelComboBox"
+                          AutomationProperties.AutomationId="ModelComboBox"
+                          AutomationProperties.Name="模型选择"
                           Grid.Column="2"
                           Width="200"
                           Height="30"
@@ -455,6 +515,7 @@
                 <Button Grid.Column="3"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="HistoryButton"
+                        AutomationProperties.Name="历史记录"
                         ToolTip="历史记录"
                         Click="HistoryButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -462,26 +523,15 @@
                                Text="&#xE81C;" />
                 </Button>
 
-                <Button x:Name="PinButton"
-                        Grid.Column="4"
+                <Button Grid.Column="4"
                         Style="{StaticResource IconButton}"
-                        ToolTip="取消窗口置顶"
-                        Click="PinButton_Click">
-                    <TextBlock x:Name="PinGlyph"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontFamily="Segoe MDL2 Assets"
-                               FontSize="16"
-                               Text="&#xE77A;" />
-                </Button>
-
-                <Button Grid.Column="5"
-                        Style="{StaticResource IconButton}"
-                        ToolTip="退出 AskAny"
-                        Click="ExitButton_Click">
+                        AutomationProperties.AutomationId="SettingsButton"
+                        AutomationProperties.Name="设置"
+                        ToolTip="设置（F1）"
+                        Click="SettingsButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
-                               FontSize="14"
-                               Text="&#xE7E8;" />
+                               FontSize="16"
+                               Text="&#xE713;" />
                 </Button>
             </Grid>
         </Grid>

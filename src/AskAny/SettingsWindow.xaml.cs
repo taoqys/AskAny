@@ -16,6 +16,7 @@ public partial class SettingsWindow : Window
 
     private readonly ConfigService _configService;
     private readonly AiService _aiService;
+    private readonly SearchService _searchService;
     private readonly AppConfig _config;
     private readonly List<ProviderConfig> _providers;
     private readonly List<FunctionOption> _functions;
@@ -25,15 +26,23 @@ public partial class SettingsWindow : Window
     private bool _isLoadingFunction;
     private bool _isNavigatingSections;
 
+    // 密文存在却解不开（配置来自其他 Windows 用户或机器）时，输入框会是空的。
+    // 必须记住这一点，否则保存时会把原密文覆盖成空串，静默毁掉用户的 Key。
+    private readonly HashSet<string> _unreadableApiKeys = new(StringComparer.OrdinalIgnoreCase);
+    private bool _tavilyKeyUnreadable;
+    private bool _zhihuSecretUnreadable;
+
     public SettingsWindow(
         ConfigService configService,
         AppConfig config,
-        AiService aiService)
+        AiService aiService,
+        SearchService searchService)
     {
         InitializeComponent();
 
         _configService = configService;
         _aiService = aiService;
+        _searchService = searchService;
         _config = config;
         _providers = config.Providers.Count == 0
             ? ProviderCatalog.CreateDefaultProviders()
@@ -63,9 +72,15 @@ public partial class SettingsWindow : Window
         {
             new FunctionModeOption("标准回答", WorkflowMode.Answer),
             new FunctionModeOption("解释说明", WorkflowMode.Explain),
-            new FunctionModeOption("联网解释", WorkflowMode.ExplainOnline),
-            new FunctionModeOption("新闻追踪", WorkflowMode.TrackNews),
-            new FunctionModeOption("深度思考", WorkflowMode.Think)
+            new FunctionModeOption("深度思考（启用推理）", WorkflowMode.Think),
+            new FunctionModeOption("联网检索", WorkflowMode.SearchNetwork)
+        };
+        FunctionSearchBackendComboBox.ItemsSource =
+        new[]
+        {
+            new SearchBackendOption("全网（Tavily）", SearchBackend.TavilyGeneral),
+            new SearchBackendOption("新闻（Tavily，偏向主流媒体）", SearchBackend.TavilyNews),
+            new SearchBackendOption("知乎站内", SearchBackend.Zhihu)
         };
         FunctionGlyphComboBox.ItemsSource =
         new[]
@@ -75,6 +90,7 @@ public partial class SettingsWindow : Window
             new FunctionGlyphOption("新闻", "\uE909"),
             new FunctionGlyphOption("思考", "\uE735"),
             new FunctionGlyphOption("搜索", "\uE774"),
+            new FunctionGlyphOption("查找", "\uE721"),
             new FunctionGlyphOption("写作", "\uE70F"),
             new FunctionGlyphOption("代码", "\uE943"),
             new FunctionGlyphOption("灵感", "\uEA80"),
@@ -83,6 +99,11 @@ public partial class SettingsWindow : Window
         };
 
         TavilyKeyBox.Password = ConfigService.Unprotect(config.TavilyApiKeyProtected);
+        _tavilyKeyUnreadable = TavilyKeyBox.Password.Length == 0 &&
+                               !string.IsNullOrWhiteSpace(config.TavilyApiKeyProtected);
+        ZhihuSecretBox.Password = ConfigService.Unprotect(config.ZhihuAccessSecretProtected);
+        _zhihuSecretUnreadable = ZhihuSecretBox.Password.Length == 0 &&
+                                 !string.IsNullOrWhiteSpace(config.ZhihuAccessSecretProtected);
         TopMostCheck.IsChecked = config.KeepWindowOnTop;
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
         HideWhenDeactivatedCheck.IsChecked = config.HideWhenDeactivated;
@@ -125,9 +146,11 @@ public partial class SettingsWindow : Window
 
             SettingsStatusText.Text = "连接成功";
         }
-        catch (Exception exception) when (
-            exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception exception)
         {
+            // 这里刻意不过滤异常类型：地址畸形会抛 UriFormatException，网关返回 HTML 会抛
+            // JsonException，两者逃出 async void 只会弹一个原始错误框，
+            // 状态栏还会停在「正在测试当前提供商…」不动。
             SettingsStatusText.Text = exception is TaskCanceledException
                 ? "连接超时"
                 : exception.Message;
@@ -150,26 +173,47 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        // 开机启动项会真的写注册表，必须先做：失败时要在改动配置之前退出，
+        // 否则会留下「注册表已改、配置未存」的不一致状态。
+        var startWithWindows = StartWithWindowsCheck.IsChecked == true;
+        if (!StartupService.SetEnabled(startWithWindows))
+        {
+            SettingsStatusText.Text = "无法修改开机启动项，请检查系统权限";
+            return;
+        }
+
         _config.Providers = _providers.Select(provider => provider.Clone()).ToList();
         _config.Functions = _functions.Select(function => function.Clone()).ToList();
         _config.SelectedProviderId = _selectedProvider!.Id;
-        _config.TavilyApiKeyProtected = ConfigService.Protect(TavilyKeyBox.Password);
+        if (TavilyKeyBox.Password.Length > 0 || !_tavilyKeyUnreadable)
+        {
+            _config.TavilyApiKeyProtected = ConfigService.Protect(TavilyKeyBox.Password);
+        }
+
+        if (ZhihuSecretBox.Password.Length > 0 || !_zhihuSecretUnreadable)
+        {
+            _config.ZhihuAccessSecretProtected = ConfigService.Protect(ZhihuSecretBox.Password);
+        }
         _config.KeepWindowOnTop = TopMostCheck.IsChecked == true;
         _config.HideWhenDeactivated = HideWhenDeactivatedCheck.IsChecked == true;
         _config.AutoFillSelectedText = AutoFillSelectionCheck.IsChecked == true;
         _config.ScreenshotHotkeyEnabled = ScreenshotHotkeyCheck.IsChecked == true;
+        _config.StartWithWindows = startWithWindows;
 
-        if (!StartupService.SetEnabled(StartWithWindowsCheck.IsChecked == true))
+        SaveButton.IsEnabled = false;
+        try
         {
-            SettingsStatusText.Text = "无法修改开机启动项，请检查系统权限";
+            await _configService.SaveAsync(_config);
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException)
+        {
+            // 写盘失败时恢复按钮，让用户能改完再试，而不是卡在禁用状态。
+            SettingsStatusText.Text = $"保存失败：{exception.Message}";
             SaveButton.IsEnabled = true;
             return;
         }
 
-        _config.StartWithWindows = StartWithWindowsCheck.IsChecked == true;
-
-        SaveButton.IsEnabled = false;
-        await _configService.SaveAsync(_config);
         DialogResult = true;
     }
 
@@ -190,7 +234,25 @@ public partial class SettingsWindow : Window
         }
 
         _selectedProvider = provider;
+        // 列表项没有实现 INotifyPropertyChanged，改名后必须重建 ItemsSource 才会重绘；
+        // 只切选中项时原来不刷新，导致刚改的名字在整场会话里都显示旧值。
+        RefreshProviderList();
         LoadProviderToForm(provider);
+    }
+
+    private void RefreshProviderList()
+    {
+        _isLoadingProvider = true;
+        try
+        {
+            ProviderList.ItemsSource = null;
+            ProviderList.ItemsSource = _providers;
+            ProviderList.SelectedItem = _selectedProvider;
+        }
+        finally
+        {
+            _isLoadingProvider = false;
+        }
     }
 
     private void ReasoningCheck_Changed(object sender, RoutedEventArgs e)
@@ -249,12 +311,66 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        var index = _providers.IndexOf(_selectedProvider);
         _providers.Remove(_selectedProvider);
-        ProviderList.ItemsSource = null;
-        ProviderList.ItemsSource = _providers;
-        ProviderList.SelectedIndex = 0;
-        _selectedProvider = ProviderList.SelectedItem as ProviderConfig;
+        _selectedProvider = _providers[Math.Clamp(index, 0, _providers.Count - 1)];
+        RefreshProviderList();
         LoadProviderToForm(_selectedProvider);
+    }
+
+    private void FunctionModeComboBox_SelectionChanged(object sender, RoutedEventArgs e)
+    {
+        UpdateSearchBackendAvailability();
+    }
+
+    // 「检索来源」只在「联网检索」下有意义；其余执行方式一律不检索。
+    private void UpdateSearchBackendAvailability()
+    {
+        var isNetwork = (FunctionModeComboBox.SelectedItem as FunctionModeOption)?.Mode
+                        == WorkflowMode.SearchNetwork;
+
+        FunctionSearchBackendComboBox.IsEnabled = isNetwork;
+        SearchBackendLabel.Opacity = isNetwork ? 1d : 0.5d;
+
+        if (isNetwork && FunctionSearchBackendComboBox.SelectedItem is null)
+        {
+            FunctionSearchBackendComboBox.SelectedIndex = 0;
+        }
+    }
+
+    // 历史检索模式在编辑界面统一显示为「联网检索」，保存时自然迁移到新模型。
+    private static WorkflowMode DisplayMode(FunctionOption function)
+    {
+        return FunctionCatalog.IsLegacySearchMode(function.Mode)
+            ? WorkflowMode.SearchNetwork
+            : function.Mode;
+    }
+
+    private async void ZhihuQuotaButton_Click(object sender, RoutedEventArgs e)
+    {
+        ZhihuQuotaButton.IsEnabled = false;
+        ZhihuQuotaText.Text = "正在查询…";
+
+        try
+        {
+            var secret = ZhihuSecretBox.Password;
+            var items = await _searchService.GetZhihuQuotaAsync(secret);
+
+            ZhihuQuotaText.Text = items.Count == 0
+                ? "该账号还没有已配置额度的知乎接口。"
+                : string.Join(
+                    "　",
+                    items.Select(item =>
+                        $"{item.ApiName} 剩余 {item.RemainingQuota}/{item.TotalQuota}（已用 {item.TotalUsed}）"));
+        }
+        catch (Exception exception)
+        {
+            ZhihuQuotaText.Text = exception.Message;
+        }
+        finally
+        {
+            ZhihuQuotaButton.IsEnabled = true;
+        }
     }
 
     private void LoadProviderToForm(ProviderConfig? provider)
@@ -272,6 +388,15 @@ public partial class SettingsWindow : Window
                 .FirstOrDefault(option => option.Protocol == provider.Protocol);
             BaseUriBox.Text = provider.BaseUri;
             ApiKeyBox.Password = ConfigService.Unprotect(provider.ApiKeyProtected);
+            if (ApiKeyBox.Password.Length == 0 && !string.IsNullOrWhiteSpace(provider.ApiKeyProtected))
+            {
+                _unreadableApiKeys.Add(provider.Id);
+            }
+            else
+            {
+                _unreadableApiKeys.Remove(provider.Id);
+            }
+
             ModelsBox.Text = string.Join(Environment.NewLine, provider.Models);
             VisionModelsBox.Text = string.Join(Environment.NewLine, provider.VisionModels);
             ReasoningCheck.IsChecked = provider.SupportsReasoningControl;
@@ -281,7 +406,9 @@ public partial class SettingsWindow : Window
                     provider.ReasoningEffort,
                     StringComparison.OrdinalIgnoreCase)) ?? "high";
             ReasoningEffortComboBox.IsEnabled = provider.SupportsReasoningControl;
-            SettingsStatusText.Text = string.Empty;
+            SettingsStatusText.Text = _unreadableApiKeys.Contains(provider.Id)
+                ? "API Key 无法解密（配置可能来自其他用户或机器），请重新填写"
+                : string.Empty;
         }
         finally
         {
@@ -296,23 +423,24 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        _selectedProvider.Name = string.IsNullOrWhiteSpace(ProviderNameBox.Text)
-            ? "未命名提供商"
-            : ProviderNameBox.Text.Trim();
+        // 这里不再把空值替换成「未命名提供商」/「model-name」占位符：
+        // 那样会让 TrySaveCurrentProvider 的名称与模型校验永远不可达，
+        // 用户的清空意图被静默翻译成一个占位值写进配置。
+        _selectedProvider.Name = ProviderNameBox.Text.Trim();
         if (ProtocolComboBox.SelectedItem is ProtocolOption protocol)
         {
             _selectedProvider.Protocol = protocol.Protocol;
         }
 
         _selectedProvider.BaseUri = BaseUriBox.Text.Trim();
-        _selectedProvider.ApiKeyProtected = ConfigService.Protect(ApiKeyBox.Password);
-        _selectedProvider.Models = ParseModels(ModelsBox.Text);
-        if (_selectedProvider.Models.Count == 0)
+        if (ApiKeyBox.Password.Length > 0 || !_unreadableApiKeys.Contains(_selectedProvider.Id))
         {
-            _selectedProvider.Models = ["model-name"];
+            _selectedProvider.ApiKeyProtected = ConfigService.Protect(ApiKeyBox.Password);
         }
 
-        if (!_selectedProvider.Models.Contains(
+        _selectedProvider.Models = ParseModels(ModelsBox.Text);
+        if (_selectedProvider.Models.Count > 0 &&
+            !_selectedProvider.Models.Contains(
                 _selectedProvider.SelectedModel,
                 StringComparer.OrdinalIgnoreCase))
         {
@@ -349,6 +477,15 @@ public partial class SettingsWindow : Window
             return false;
         }
 
+        // 只校验非空是不够的：地址缺协议头或拼错时，AiService 里拼出的相对地址
+        // 会在发送阶段才失败，用户看到的是运行期报错而不是这里的一句提示。
+        if (!IsSupportedBaseUri(_selectedProvider.BaseUri))
+        {
+            SettingsStatusText.Text = "接口地址需要是完整的 http:// 或 https:// 地址";
+            BaseUriBox.Focus();
+            return false;
+        }
+
         if (_selectedProvider.Models.Count == 0)
         {
             SettingsStatusText.Text = "请至少填写一个模型";
@@ -357,6 +494,12 @@ public partial class SettingsWindow : Window
         }
 
         return true;
+    }
+
+    private static bool IsSupportedBaseUri(string value)
+    {
+        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+               (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
     }
 
     private void FunctionEditorList_SelectionChanged(
@@ -372,6 +515,8 @@ public partial class SettingsWindow : Window
 
         SaveCurrentFunction(refreshList: false);
         _selectedFunction = function;
+        // 同理：函数列表也要重建，否则改名 / 换图标后列表项仍显示旧值。
+        RefreshFunctionEditorList();
         LoadFunctionToForm(function);
     }
 
@@ -484,7 +629,22 @@ public partial class SettingsWindow : Window
             FunctionPromptBox.Text = function.SystemPrompt;
             FunctionModeComboBox.SelectedItem =
                 ((IEnumerable<FunctionModeOption>)FunctionModeComboBox.ItemsSource)
-                .FirstOrDefault(option => option.Mode == function.Mode);
+                .FirstOrDefault(option => option.Mode == DisplayMode(function));
+
+            // 历史检索模式（新闻追踪 / 联网解释 / 知乎搜索）在界面上统一按「联网检索」展示，
+            // 来源由其 SearchBackend 决定。非检索的执行方式下留空并禁用 —— 显示一个具体来源
+            //（如「全网」）会让人以为「标准回答」也会去联网检索。
+            var isNetwork = DisplayMode(function) == WorkflowMode.SearchNetwork;
+            var backend = isNetwork && function.SearchBackend == SearchBackend.None
+                ? SearchBackend.TavilyGeneral
+                : function.SearchBackend;
+
+            FunctionSearchBackendComboBox.SelectedItem = isNetwork
+                ? ((IEnumerable<SearchBackendOption>)FunctionSearchBackendComboBox.ItemsSource)
+                  .FirstOrDefault(option => option.Source == backend)
+                  ?? FunctionSearchBackendComboBox.Items[0]
+                : null;
+            UpdateSearchBackendAvailability();
             FunctionGlyphComboBox.SelectedItem =
                 ((IEnumerable<FunctionGlyphOption>)FunctionGlyphComboBox.ItemsSource)
                 .FirstOrDefault(option => option.Glyph == function.Glyph)
@@ -510,6 +670,10 @@ public partial class SettingsWindow : Window
                     ?? _selectedFunction.Glyph;
 
         _selectedFunction.Mode = mode;
+        _selectedFunction.SearchBackend = mode == WorkflowMode.SearchNetwork
+            ? (FunctionSearchBackendComboBox.SelectedItem as SearchBackendOption)?.Source
+              ?? SearchBackend.TavilyGeneral
+            : SearchBackend.None;
         _selectedFunction.Name = string.IsNullOrWhiteSpace(FunctionNameBox.Text)
             ? FunctionCatalog.GetModeName(mode)
             : FunctionNameBox.Text.Trim();
@@ -663,6 +827,8 @@ public partial class SettingsWindow : Window
     private sealed record ProtocolOption(string Name, ApiProtocol Protocol);
 
     private sealed record FunctionModeOption(string Name, WorkflowMode Mode);
+
+    private sealed record SearchBackendOption(string Name, SearchBackend Source);
 
     private sealed record FunctionGlyphOption(string Name, string Glyph);
 }

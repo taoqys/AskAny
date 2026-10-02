@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net.Http.Headers;
 using AskAny.Models;
 
 namespace AskAny.Services;
@@ -12,9 +14,27 @@ public sealed record SearchPacket(
     string Query,
     IReadOnlyList<SearchSource> Sources);
 
+// 知乎额度项。用于在设置里把「今天还剩多少次」显示出来。
+public sealed record QuotaItem(
+    string ApiId,
+    string ApiName,
+    long TotalQuota,
+    long TotalUsed,
+    long RemainingQuota);
+
 public sealed class SearchService
 {
     private const string SearchEndpoint = "https://api.tavily.com/search";
+    private const string ZhihuSearchEndpoint = "https://developer.zhihu.com/api/v1/content/zhihu_search";
+    private const string ZhihuQuotaEndpoint = "https://developer.zhihu.com/api/v1/quota";
+    private const string ZhihuQuotaApiIds = "zhihu_search,zhida_openai";
+
+    // 官方文档：Count 默认 10，最大 10，超出会被服务端截断。
+    private const int ZhihuMaxResults = 10;
+
+    // HttpClient 的 Timeout 已被 AiService 要求设为无限（否则会掐断流式回答），
+    // 所以检索这边必须自己设一个上限，避免卡住整条请求链。
+    private static readonly TimeSpan SearchTimeout = TimeSpan.FromSeconds(30);
     private readonly HttpClient _httpClient;
 
     public SearchService(HttpClient httpClient)
@@ -48,7 +68,11 @@ public sealed class SearchService
         if (news)
         {
             body["topic"] = "news";
-            body["days"] = 7;
+            // 这里原来发的是 days=7，但 days 并不在 Tavily 的 API 里（官方 25 个请求参数
+            // 中没有它），所以「最近 7 天」从来没生效过。time_range 才是官方的时间窗参数。
+            body["time_range"] = "week";
+            // time_range 默认不剔除「没有可识别发布日期」的结果，对新闻语义来说是噪声。
+            body["filter_by_published_date"] = true;
         }
         else
         {
@@ -60,7 +84,10 @@ public sealed class SearchService
             Encoding.UTF8,
             "application/json");
 
-        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SearchTimeout);
+
+        using var response = await _httpClient.SendAsync(request, timeout.Token);
         var payload = await response.Content.ReadAsStringAsync(cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -81,6 +108,143 @@ public sealed class SearchService
         return new SearchPacket(query, sources);
     }
 
+    // 知乎站内搜索。与 Tavily 的差异：需要 Bearer + 秒级时间戳两个头，
+    // 返回体是 PascalCase 自有信封（Code / Message / Data.Items），且 Count 上限为 10。
+    public async Task<SearchPacket> SearchZhihuAsync(
+        string query,
+        string accessSecret,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessSecret))
+        {
+            throw new InvalidOperationException("尚未配置知乎 Access Secret，无法使用知乎搜索。");
+        }
+
+        var requestUri =
+            $"{ZhihuSearchEndpoint}?Query={Uri.EscapeDataString(query)}&Count={ZhihuMaxResults}";
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessSecret.Trim());
+        request.Headers.TryAddWithoutValidation(
+            "X-Request-Timestamp",
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SearchTimeout);
+
+        using var response = await _httpClient.SendAsync(request, timeout.Token);
+        var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"知乎搜索失败（{(int)response.StatusCode}）：{Shorten(payload)}");
+        }
+
+        var envelope = JsonSerializer.Deserialize<ZhihuEnvelope>(payload, JsonDefaults.Compact)
+                       ?? new ZhihuEnvelope(0, null, null);
+
+        if (envelope.Code != 0)
+        {
+            throw new InvalidOperationException(DescribeZhihuError(envelope.Code, envelope.Message));
+        }
+
+        var sources = (envelope.Data?.Items ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item.Url))
+            .Select(item => new SearchSource(
+                string.IsNullOrWhiteSpace(item.Title) ? "未命名内容" : item.Title!,
+                item.Url!,
+                item.ContentText ?? string.Empty,
+                FormatEditTime(item.EditTime)))
+            .ToArray();
+
+        return new SearchPacket(query, sources);
+    }
+
+    // 20001 既可能是密钥错，也可能是本机时钟偏差超过 10 分钟，必须把两种成因都提示出来。
+    private static string DescribeZhihuError(int code, string? message)
+    {
+        var text = string.IsNullOrWhiteSpace(message) ? "未知错误" : message;
+
+        return code switch
+        {
+            20001 => $"知乎鉴权失败（20001）：{text}。请检查 Access Secret，" +
+                     "并确认本机时间准确——时间戳与服务端相差超过 10 分钟也会返回 20001。",
+            30001 => $"知乎接口触发频率限制（30001）：{text}",
+            _ => $"知乎搜索失败（{code}）：{text}"
+        };
+    }
+
+    // 知乎按成功调用计费（知乎搜索 20 元/千次）。额度查询本身不消耗业务额度，
+    // 设置界面用它把「今天还剩多少次」显示出来。
+    public async Task<IReadOnlyList<QuotaItem>> GetZhihuQuotaAsync(
+        string accessSecret,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(accessSecret))
+        {
+            throw new InvalidOperationException("尚未配置知乎 Access Secret。");
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(SearchTimeout);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{ZhihuQuotaEndpoint}?APIIDs={ZhihuQuotaApiIds}");
+
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessSecret.Trim());
+        request.Headers.TryAddWithoutValidation(
+            "X-Request-Timestamp",
+            DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+
+        using var response = await _httpClient.SendAsync(request, timeout.Token);
+        var payload = await response.Content.ReadAsStringAsync(timeout.Token);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"查询知乎额度失败（{(int)response.StatusCode}）：{Shorten(payload)}");
+        }
+
+        var envelope = JsonSerializer.Deserialize<ZhihuQuotaEnvelope>(payload, JsonDefaults.Compact)
+                       ?? new ZhihuQuotaEnvelope(0, null, null);
+
+        if (envelope.Code != 0)
+        {
+            throw new InvalidOperationException(DescribeZhihuError(envelope.Code, envelope.Message));
+        }
+
+        return (envelope.Data ?? [])
+            .Where(item => !string.IsNullOrWhiteSpace(item.ApiId))
+            .Select(item => new QuotaItem(
+                item.ApiId!,
+                string.IsNullOrWhiteSpace(item.ApiName) ? item.ApiId! : item.ApiName!,
+                item.TotalQuota,
+                item.TotalUsed,
+                item.RemainingQuota))
+            .ToArray();
+    }
+
+    private static string? FormatEditTime(int unixSeconds)
+    {
+        if (unixSeconds <= 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(unixSeconds)
+                .ToLocalTime()
+                .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return null;
+        }
+    }
+
     private static string Shorten(string value)
     {
         var normalized = value.ReplaceLineEndings(" ").Trim();
@@ -94,4 +258,29 @@ public sealed class SearchService
         string? Url,
         string? Content,
         [property: JsonPropertyName("published_date")] string? PublishedDate);
+
+    private sealed record ZhihuEnvelope(
+        int Code,
+        string? Message,
+        ZhihuData? Data);
+
+    private sealed record ZhihuData(List<ZhihuItem>? Items);
+
+    private sealed record ZhihuItem(
+        string? Title,
+        string? ContentText,
+        string? Url,
+        int EditTime);
+
+    private sealed record ZhihuQuotaEnvelope(
+        int Code,
+        string? Message,
+        List<ZhihuQuotaData>? Data);
+
+    private sealed record ZhihuQuotaData(
+        string? ApiId,
+        string? ApiName,
+        long TotalQuota,
+        long TotalUsed,
+        long RemainingQuota);
 }
