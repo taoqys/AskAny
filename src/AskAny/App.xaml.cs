@@ -30,9 +30,11 @@ public partial class App : Application
                            screenshotMode.Equals("--screenshot-markdown", StringComparison.OrdinalIgnoreCase);
         // 诊断模式：把配置读进来跑完整套迁移后另存为 JSON，用来核对迁移结果而不碰真实配置。
         var isDumpConfig = screenshotMode.Equals("--dump-config", StringComparison.OrdinalIgnoreCase);
+        // 诊断模式：用真实配置各发一次非流式与流式请求，用来核对请求构造与流式解析。
+        var isSelfTest = screenshotMode.Equals("--selftest", StringComparison.OrdinalIgnoreCase);
         // --instance= 只对截图/诊断模式开放。普通启动下如果允许它绕过单实例锁，
         // 两个实例会各装一个全局键盘钩子，双击 Shift 会被响应两次、弹出两个面板。
-        var isDiagnosticMode = isScreenshot || isDumpConfig;
+        var isDiagnosticMode = isScreenshot || isDumpConfig || isSelfTest;
         var instanceName = isDiagnosticMode
             ? e.Args
                 .FirstOrDefault(argument => argument.StartsWith("--instance=", StringComparison.OrdinalIgnoreCase))
@@ -68,6 +70,13 @@ public partial class App : Application
         if (isDumpConfig)
         {
             DumpConfig(e.Args);
+            Shutdown();
+            return;
+        }
+
+        if (isSelfTest)
+        {
+            RunSelfTest(e.Args);
             Shutdown();
             return;
         }
@@ -261,6 +270,92 @@ public partial class App : Application
         mainWindow.UpdateLayout();
         SaveScreenshot(mainWindow, outputPath);
         Shutdown();
+    }
+
+    // 用法：AskAny.exe --selftest <输出 txt>
+    // 用真实配置各发一次非流式与流式请求，把结果写成报告。
+    // 目的是核对「请求构造 + 响应解析 + 流式分片解析」在真实提供商上是否成立 ——
+    // 这些路径没有单测能覆盖到真实 API 的差异。会产生少量计费调用。
+    private static void RunSelfTest(string[] args)
+    {
+        var outputPath = args.Length >= 2 ? args[1] : string.Empty;
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            return;
+        }
+
+        var report = new StringBuilder();
+
+        try
+        {
+            // 必须在线程池上跑：LoadAsync 等的 await 需要回到 UI 线程，
+            // 在 UI 线程上同步等待会死锁（--dump-config 曾栽在这里）。
+            Task.Run(async () =>
+            {
+                var config = await new ConfigService().LoadAsync();
+                var provider = config.Providers.FirstOrDefault(item => item.Id == config.SelectedProviderId)
+                               ?? config.Providers.FirstOrDefault();
+
+                if (provider is null)
+                {
+                    report.AppendLine("没有可用的提供商。");
+                    return;
+                }
+
+                report.AppendLine($"提供商：{provider.Name}");
+                report.AppendLine($"协议  ：{provider.Protocol}");
+                report.AppendLine($"地址  ：{provider.BaseUri}");
+                report.AppendLine($"模型  ：{provider.SelectedModel}");
+                report.AppendLine();
+
+                using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+                var service = new AiService(http);
+                var key = ConfigService.Unprotect(provider.ApiKeyProtected);
+                var function = FunctionCatalog.CreateDefaultFunctions()[0];
+
+                try
+                {
+                    var plain = await service.ExecuteAsync(
+                        function, "只回复“连接成功”四个字。", provider, key, null);
+                    report.AppendLine($"非流式：成功，回答 {plain.Answer.Length} 字");
+                }
+                catch (Exception exception)
+                {
+                    report.AppendLine($"非流式：失败 —— {exception.Message}");
+                }
+
+                var deltas = 0;
+                try
+                {
+                    var streamed = await service.ExecuteStreamingAsync(
+                        function,
+                        "数到三。",
+                        provider,
+                        key,
+                        null,
+                        null,
+                        null,
+                        (_, _) => deltas++);
+                    report.AppendLine($"流式  ：成功，{deltas} 个分片，最终 {streamed.Answer.Length} 字");
+                }
+                catch (Exception exception)
+                {
+                    report.AppendLine($"流式  ：失败（真实使用时会回退到非流式）—— {exception.Message}");
+                }
+            }).GetAwaiter().GetResult();
+        }
+        catch (Exception exception)
+        {
+            report.AppendLine($"自检异常：{exception.GetType().Name}: {exception.Message}");
+        }
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            System.IO.Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(outputPath, report.ToString(), Encoding.UTF8);
     }
 
     // 用法：AskAny.exe --dump-config <输入配置> <输出 json>
