@@ -368,14 +368,7 @@
                     <StackPanel Grid.Row="1" Margin="0,0,0,4">
                         <Button x:Name="ReasoningChip"
                                 HorizontalAlignment="Left"
-                                Padding="9,1"
-                                Background="Transparent"
-                                BorderBrush="{StaticResource LineBrush}"
-                                BorderThickness="1"
-                                CornerRadius="9"
-                                Cursor="Hand"
-                                FontSize="11"
-                                Foreground="{StaticResource MutedBrush}"
+                                Style="{StaticResource SourceChip}"
                                 ToolTip="展开 / 收起思考过程"
                                 Visibility="Collapsed"
                                 Click="ReasoningChip_Click" />
