@@ -1972,6 +1972,39 @@ public partial class MainWindow : Window
     {
         return ((index % count) + count) % count;
     }
+    // 仅供 CI 截图：简化后的单栏回答页（含「已思考」折叠提示与一行指标）。
+    public void ShowAnswerPreview()
+    {
+        ApplyCompareMode(false, save: false);
+
+        ResponsePanel.Visibility = Visibility.Visible;
+        FunctionList.Visibility = Visibility.Collapsed;
+        UpdateModeStripVisibility();
+
+        var model = _currentProvider is null
+            ? "gpt-4.1-mini"
+            : _currentProvider.SelectedModel;
+        ResponseModeText.Text = $"回答 · {model}";
+        ResponseMetaText.Text = "1.8s · 首字 0.4s · 480→210 tok · Enter 追问";
+
+        SetOutputMarkdown(
+            """
+            ## 要点
+
+            先给结论，再补一句理由。
+
+            - 回答页只保留正文与少量提示信息
+            - 推理过程收成一行，想看的点开
+
+            行内公式 $E = mc^2$ 正常渲染。
+            """,
+            """
+            1. 先判断问题类型；
+            2. 再看是否需要举例；
+            3. 最后压缩成三句话。
+            """);
+    }
+
     // 仅供 CI 截图：把面板切到「对比模式」并填两段示例回答。
     // 纯本地渲染、不发任何请求，用来核对左右分栏的布局。
     public void ShowComparePreview()

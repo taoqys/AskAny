@@ -203,8 +203,9 @@ public partial class App : Application
 
         // --screenshot <输出> [功能索引 | compare]：可选指定选中哪一项，
         // 用于截到来源切换条这类「只在特定选中项下出现」的界面；
-        // 传 compare 则截双模型对比的分栏布局。
+        // 传 compare 截双模型对比分栏，传 answer 截简化后的单栏回答页。
         var previewCompare = false;
+        var previewAnswer = false;
         if (isScreenshot && e.Args.Length >= 3)
         {
             if (int.TryParse(e.Args[2], out var previewFunctionIndex))
@@ -214,6 +215,10 @@ public partial class App : Application
             else if (e.Args[2].Equals("compare", StringComparison.OrdinalIgnoreCase))
             {
                 previewCompare = true;
+            }
+            else if (e.Args[2].Equals("answer", StringComparison.OrdinalIgnoreCase))
+            {
+                previewAnswer = true;
             }
         }
 
@@ -226,7 +231,7 @@ public partial class App : Application
             // 阻塞 UI 线程会直接死锁（--dump-config 栽过同一个坑）。
             // 改为异步等待、截完自行关闭（ShutdownMode 是 OnExplicitShutdown）。
             SafeTask.Run(
-                () => SaveScreenshotAfterLoadAsync(mainWindow, e.Args[1], previewCompare),
+                () => SaveScreenshotAfterLoadAsync(mainWindow, e.Args[1], previewCompare, previewAnswer),
                 "截图预览");
             return;
         }
@@ -301,7 +306,8 @@ public partial class App : Application
     private async Task SaveScreenshotAfterLoadAsync(
         MainWindow mainWindow,
         string outputPath,
-        bool previewCompare)
+        bool previewCompare,
+        bool previewAnswer)
     {
         try
         {
@@ -315,6 +321,10 @@ public partial class App : Application
         if (previewCompare)
         {
             mainWindow.ShowComparePreview();
+        }
+        else if (previewAnswer)
+        {
+            mainWindow.ShowAnswerPreview();
         }
 
         mainWindow.UpdateLayout();

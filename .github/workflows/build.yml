@@ -49,7 +49,8 @@ jobs:
             @{ Path = "artifacts/ui/markdown-preview.png"; Arguments = @("--screenshot-markdown", "artifacts/ui/markdown-preview.png") },
             @{ Path = "artifacts/ui/main.png"; Arguments = @("--screenshot", "artifacts/ui/main.png") },
             @{ Path = "artifacts/ui/main-network.png"; Arguments = @("--screenshot", "artifacts/ui/main-network.png", "2") },
-            @{ Path = "artifacts/ui/main-compare.png"; Arguments = @("--screenshot", "artifacts/ui/main-compare.png", "compare") }
+            @{ Path = "artifacts/ui/main-compare.png"; Arguments = @("--screenshot", "artifacts/ui/main-compare.png", "compare") },
+            @{ Path = "artifacts/ui/main-answer.png"; Arguments = @("--screenshot", "artifacts/ui/main-answer.png", "answer") }
           )
           foreach ($capture in $captures) {
             $process = Start-Process `
