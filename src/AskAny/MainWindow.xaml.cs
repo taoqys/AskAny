@@ -1448,9 +1448,20 @@ public partial class MainWindow : Window
     // 看回答时把它收起来，把高度让给正文。Ctrl+D 在回答页仍然可用。
     private void UpdateModeStripVisibility()
     {
-        ModeStrip.Visibility = ResponsePanel.Visibility == Visibility.Visible
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+        var isAnswering = ResponsePanel.Visibility == Visibility.Visible;
+
+        ModeStrip.Visibility = isAnswering ? Visibility.Collapsed : Visibility.Visible;
+        HomeExtras.Visibility = isAnswering ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    // 主页那张「当前模型能力」提示：模型一换就更新。
+    private void UpdateHomeModelCapability()
+    {
+        var current = CurrentPrimaryChoice();
+
+        ModelCapabilityText.Text = current is null
+            ? "还没有可用模型：到设置里添加提供商并勾选启用模型。"
+            : $"当前模型：{BuildModelToolTip(current)}";
     }
 
     private static string AppendSources(string answer, SearchPacket? search)
@@ -1832,6 +1843,7 @@ public partial class MainWindow : Window
 
             RefreshCompareOptions();
             UpdateAttachmentTargetText();
+            UpdateHomeModelCapability();
         }
         finally
         {
@@ -2126,6 +2138,7 @@ public partial class MainWindow : Window
         // 主模型变了，右栏候选也要跟着排除它。
         RefreshCompareOptions();
         UpdateAttachmentTargetText();
+        UpdateHomeModelCapability();
         SaveConfigInBackground();
     }
     private void SettingsButton_Click(object sender, RoutedEventArgs e)

@@ -200,8 +200,12 @@
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
+                <StackPanel x:Name="HomePanel"
+                            Margin="12,8,12,8"
+                            VerticalAlignment="Top">
                 <ListBox x:Name="FunctionList"
-                         Margin="10,8,10,6"
+                         Margin="0"
+                         Padding="0"
                          BorderThickness="0"
                          Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -241,7 +245,7 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid MinHeight="36">
+                            <Grid MinHeight="46">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="38" />
                                     <ColumnDefinition Width="*" />
@@ -276,13 +280,19 @@
                                         </TextBlock>
                                     </Grid>
                                 </Border>
-                                <TextBlock Grid.Column="1"
-                                           Margin="8,0,8,0"
-                                           VerticalAlignment="Center"
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource InkBrush}"
-                                           Text="{Binding Name}" />
+                                <StackPanel Grid.Column="1"
+                                            Margin="8,0,8,0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="{Binding Name}" />
+                                    <TextBlock Margin="0,2,0,0"
+                                               FontSize="11"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               Text="{Binding Description}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
                                 <TextBlock x:Name="RowRunHint"
                                            Grid.Column="2"
                                            Margin="8,0,4,0"
@@ -304,6 +314,38 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+
+                <!-- 主页信息区：把只在底栏小字里出现的能力与快捷键讲清楚，
+                     同时让主页不再显得空旷。回答页会整体隐藏。 -->
+                <StackPanel x:Name="HomeExtras" Margin="0,14,0,0">
+                    <Border Padding="12,10"
+                            Background="#F7F7F9"
+                            CornerRadius="7">
+                        <StackPanel>
+                            <TextBlock FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Text="快捷键" />
+                            <TextBlock Margin="0,5,0,0"
+                                       FontSize="11.5"
+                                       Foreground="{StaticResource InkBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="Tab / ⇧Tab 换模型　·　Ctrl+D 双模型对比　·　Ctrl+N 新话题" />
+                            <TextBlock Margin="0,3,0,0"
+                                       FontSize="11.5"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="PgUp / PgDn 切思考　·　Alt+1/2/3 切检索来源" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="ModelCapabilityText"
+                               Margin="12,10,12,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                </StackPanel>
 
                 <Grid x:Name="ResponsePanel"
                       Margin="12,8"
