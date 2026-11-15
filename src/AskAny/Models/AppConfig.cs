@@ -190,6 +190,11 @@ public sealed class AppConfig
     public HotkeyModifier ScreenshotHotkeyModifier { get; set; } = HotkeyModifier.Control;
     public int HotkeyDoubleTapIntervalMs { get; set; } = 400;
 
+    // 双模型对比：同一个问题同时问两个模型，左右分屏。
+    public bool CompareMode { get; set; }
+    public string CompareProviderId { get; set; } = string.Empty;
+    public string CompareModel { get; set; } = string.Empty;
+
     // Legacy fields are retained so existing installations migrate cleanly.
     public string OpenAiBaseUri { get; set; } = "https://api.openai.com/v1";
     public string Model { get; set; } = "gpt-4.1-mini";
@@ -215,6 +220,9 @@ public sealed class AppConfig
             SelectionHotkeyModifier = SelectionHotkeyModifier,
             ScreenshotHotkeyModifier = ScreenshotHotkeyModifier,
             HotkeyDoubleTapIntervalMs = HotkeyDoubleTapIntervalMs,
+            CompareMode = CompareMode,
+            CompareProviderId = CompareProviderId,
+            CompareModel = CompareModel,
             OpenAiBaseUri = OpenAiBaseUri,
             Model = Model,
             OpenAiApiKeyProtected = OpenAiApiKeyProtected

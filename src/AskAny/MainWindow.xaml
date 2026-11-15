@@ -48,11 +48,15 @@
 
                 <!-- 模型 tab：只显示设置里勾选启用的模型，点一下即切换。
                      只有一个模型时它同时充当「当前模型」提示，所以不做隐藏。 -->
-                <ScrollViewer x:Name="ModelTabScroll"
-                              Grid.Row="0"
-                              Margin="12,6,10,0"
-                              HorizontalScrollBarVisibility="Hidden"
-                              VerticalScrollBarVisibility="Disabled">
+                <Grid Grid.Row="0" Margin="12,6,10,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ScrollViewer x:Name="ModelTabScroll"
+                                  Grid.Column="0"
+                                  HorizontalScrollBarVisibility="Hidden"
+                                  VerticalScrollBarVisibility="Disabled">
                     <ItemsControl x:Name="ModelTabStrip"
                                   AutomationProperties.AutomationId="ModelTabs"
                                   AutomationProperties.Name="模型切换">
@@ -92,7 +96,29 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                </ScrollViewer>
+                    </ScrollViewer>
+                    <ToggleButton x:Name="CompareModeButton"
+                                  Grid.Column="1"
+                                  Margin="6,0,0,0"
+                                  Padding="8,2"
+                                  VerticalAlignment="Center"
+                                  Background="Transparent"
+                                  BorderBrush="{StaticResource LineBrush}"
+                                  BorderThickness="1"
+                                  Cursor="Hand"
+                                  FontSize="11"
+                                  Foreground="{StaticResource MutedBrush}"
+                                  ToolTip="双模型对比：同一个问题同时问两个模型，左右分屏（Ctrl+D）"
+                                  Checked="CompareModeButton_Toggled"
+                                  Unchecked="CompareModeButton_Toggled">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock FontFamily="Segoe MDL2 Assets"
+                                       FontSize="11"
+                                       Text="&#xE8AB;" />
+                            <TextBlock Margin="4,0,0,0" Text="对比" />
+                        </StackPanel>
+                    </ToggleButton>
+                </Grid>
 
                 <Grid Grid.Row="1"
                       MinHeight="48"
@@ -442,33 +468,111 @@
                         </Border>
                     </Expander>
 
-                    <Border Grid.Row="2"
-                            Background="#FAFAFB"
-                            BorderBrush="{StaticResource LineBrush}"
-                            BorderThickness="1"
-                            CornerRadius="7">
-                        <Grid>
-                            <RichTextBox x:Name="OutputRichText"
-                                         AutomationProperties.AutomationId="OutputRichText"
-                                         AutomationProperties.Name="回答内容"
-                                         Margin="12"
-                                         Padding="0"
-                                         IsReadOnly="True"
-                                         IsDocumentEnabled="True"
-                                         Background="Transparent"
-                                         BorderThickness="0"
-                                         VerticalScrollBarVisibility="Auto"
-                                         HorizontalScrollBarVisibility="Disabled" />
-                            <ProgressBar x:Name="BusyProgress"
-                                         Height="3"
-                                         Margin="12,0,12,8"
-                                         VerticalAlignment="Bottom"
-                                         Background="Transparent"
-                                         Foreground="{StaticResource AccentBrush}"
-                                         IsIndeterminate="True"
-                                         Visibility="Collapsed" />
-                        </Grid>
-                    </Border>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="CompareSplitterColumn" Width="0" />
+                            <ColumnDefinition x:Name="CompareColumn" Width="0" />
+                        </Grid.ColumnDefinitions>
+
+                        <DockPanel Grid.Column="0">
+                            <!-- 对比模式下给左栏一个模型标签，否则不知道哪边是哪个模型。 -->
+                            <TextBlock x:Name="PrimaryModelText"
+                                       DockPanel.Dock="Top"
+                                       Margin="0,0,0,4"
+                                       FontSize="11.5"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       Visibility="Collapsed" />
+                            <Border Background="#FAFAFB"
+                                    BorderBrush="{StaticResource LineBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                <Grid>
+                                    <RichTextBox x:Name="OutputRichText"
+                                                 AutomationProperties.AutomationId="OutputRichText"
+                                                 AutomationProperties.Name="回答内容"
+                                                 Margin="12"
+                                                 Padding="0"
+                                                 IsReadOnly="True"
+                                                 IsDocumentEnabled="True"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 HorizontalScrollBarVisibility="Disabled" />
+                                    <ProgressBar x:Name="BusyProgress"
+                                                 Height="3"
+                                                 Margin="12,0,12,8"
+                                                 VerticalAlignment="Bottom"
+                                                 Background="Transparent"
+                                                 Foreground="{StaticResource AccentBrush}"
+                                                 IsIndeterminate="True"
+                                                 Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </DockPanel>
+
+                        <DockPanel x:Name="ComparePane"
+                                   Grid.Column="2"
+                                   Visibility="Collapsed">
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="CompareModelText"
+                                           VerticalAlignment="Center"
+                                           FontSize="11.5"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource AccentBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <Button x:Name="CycleCompareModelButton"
+                                        Grid.Column="1"
+                                        Width="26"
+                                        Height="22"
+                                        Style="{StaticResource IconButton}"
+                                        ToolTip="切换对比模型"
+                                        Click="CycleCompareModelButton_Click">
+                                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                                               FontSize="12"
+                                               Text="&#xE8AB;" />
+                                </Button>
+                            </Grid>
+                            <TextBlock x:Name="CompareMetaText"
+                                       DockPanel.Dock="Top"
+                                       Margin="0,0,0,4"
+                                       FontSize="11"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Border Background="#FAFAFB"
+                                    BorderBrush="{StaticResource LineBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                <Grid>
+                                    <RichTextBox x:Name="CompareRichText"
+                                                 AutomationProperties.AutomationId="CompareRichText"
+                                                 AutomationProperties.Name="对比回答内容"
+                                                 Margin="12"
+                                                 Padding="0"
+                                                 IsReadOnly="True"
+                                                 IsDocumentEnabled="True"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 HorizontalScrollBarVisibility="Disabled" />
+                                    <ProgressBar x:Name="CompareBusyProgress"
+                                                 Height="3"
+                                                 Margin="12,0,12,8"
+                                                 VerticalAlignment="Bottom"
+                                                 Background="Transparent"
+                                                 Foreground="{StaticResource AccentBrush}"
+                                                 IsIndeterminate="True"
+                                                 Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </DockPanel>
+                    </Grid>
                 </Grid>
             </Grid>
 

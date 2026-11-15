@@ -40,11 +40,26 @@ public partial class MainWindow : Window
     private string _lastAnswer = string.Empty;
 
     // 流式渲染：读流在线程池上跑，只往缓冲区追加；界面按固定间隔统一重排。
+    // 一栏一个 StreamTarget —— 单模型只用 _primaryStream，对比模式再启用 _compareStream。
     private readonly object _streamGate = new();
-    private readonly StringBuilder _streamingContent = new();
-    private readonly StringBuilder _streamingReasoning = new();
+    private readonly StreamTarget _primaryStream = new();
+    private readonly StreamTarget _compareStream = new();
     private DispatcherTimer _streamRenderTimer = null!;
-    private bool _streamDirty;
+
+    // 双模型对比：右侧那一栏的模型与本次耗时。
+    private ModelChoice? _compareChoice;
+    private bool _compareMode;
+    private bool _applyingCompareMode;
+    private readonly System.Diagnostics.Stopwatch _compareStopwatch = new();
+
+    private sealed class StreamTarget
+    {
+        public StringBuilder Content { get; } = new();
+
+        public StringBuilder Reasoning { get; } = new();
+
+        public bool Dirty { get; set; }
+    }
 
     // 当前进行中请求的取消源：Esc 用它中断。
     private CancellationTokenSource? _requestCancellation;
@@ -233,6 +248,14 @@ public partial class MainWindow : Window
                 Hide();
             }
 
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+D 切换双模型对比（左右分屏）。
+        if (e.Key == Key.D && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            ApplyCompareMode(!_compareMode, save: true);
             e.Handled = true;
             return;
         }
@@ -636,8 +659,21 @@ public partial class MainWindow : Window
         ResponsePanel.Visibility = Visibility.Visible;
         FunctionList.Visibility = Visibility.Collapsed;
         SetResponsePromptDisplay(prompt, images.Count);
-        ResponseModeText.Text = $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
+        ResponseModeText.Text = _compareMode
+            ? $"{option.Name} · 双模型对比"
+            : $"{option.Name} · {provider.Name} / {provider.SelectedModel}";
         ResponseMetaText.Text = "正在准备…";
+        if (_compareMode)
+        {
+            PrimaryModelText.Text = $"{provider.Name} · {provider.SelectedModel}";
+            CompareModelText.Text = _compareChoice is null
+                ? "未选择"
+                : $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
+            CompareMetaText.Text = "等待中…";
+            ResetStream(_compareStream);
+            SetCompareMarkdown("正在生成回答…", null);
+        }
+
         SetOutputMarkdown(
             option.SearchBackend switch
             {
@@ -662,7 +698,9 @@ public partial class MainWindow : Window
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
             }
 
-            var result = await ExecuteWithStreamingAsync(option, prompt, provider, search, images);
+            var result = _compareMode && _compareChoice is not null
+                ? await ExecuteCompareAsync(option, prompt, provider, search, images)
+                : await ExecuteWithStreamingAsync(option, prompt, provider, search, images);
 
             var displayAnswer = AppendSources(result.Answer, search);
             var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
@@ -830,6 +868,9 @@ public partial class MainWindow : Window
 
     // 流式：读流放在线程池上，分片只往缓冲区里追加；渲染交给定时器节流。
     // 每个分片都重排一次 Markdown 会把界面拖垮，所以按固定间隔统一渲染。
+    //
+    // 单模型和双模型对比共用这一套：一个「栏」就是一个 StreamTarget，
+    // 两条流各写各的缓冲区，渲染时一次读回两份。
     private async Task<AiResult> ExecuteWithStreamingAsync(
         FunctionOption option,
         string prompt,
@@ -842,50 +883,13 @@ public partial class MainWindow : Window
 
         using var cancellation = new CancellationTokenSource();
         _requestCancellation = cancellation;
-
-        lock (_streamGate)
-        {
-            _streamingContent.Clear();
-            _streamingReasoning.Clear();
-            _streamDirty = false;
-        }
-
+        ResetStream(_primaryStream);
         StartStreamTimer();
 
         try
         {
-            return await Task.Run(() => _aiService.ExecuteStreamingAsync(
-                option,
-                prompt,
-                provider,
-                apiKey,
-                search,
-                images,
-                conversation,
-                OnStreamDelta,
-                cancellation.Token));
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            // 不同提供商/代理对 SSE 的支持程度不一致，流式失败必须退回非流式，
-            // 否则「支持流式」本身会变成新的失败点。
-            ErrorLog.Write("流式请求失败，回退到非流式", exception);
-
-            lock (_streamGate)
-            {
-                _streamingContent.Clear();
-                _streamingReasoning.Clear();
-                _streamDirty = false;
-            }
-
-            return await _aiService.ExecuteAsync(
-                option,
-                prompt,
-                provider,
-                apiKey,
-                search,
-                images,
-                conversation,
+            return await RunPaneAsync(
+                _primaryStream, option, provider, apiKey, prompt, search, images, conversation,
                 cancellation.Token);
         }
         finally
@@ -896,22 +900,171 @@ public partial class MainWindow : Window
         }
     }
 
-    // 此方法在线程池线程上被调用，只做追加，不碰任何界面对象。
-    private void OnStreamDelta(string content, string reasoning)
+    // 双模型对比：同一个问题、同一份检索资料，同时问两个模型，各写自己那一栏。
+    // 检索只做一次（两个模型看到同样的资料才可比），右侧答案只展示、不写历史。
+    private async Task<AiResult> ExecuteCompareAsync(
+        FunctionOption option,
+        string prompt,
+        ProviderConfig provider,
+        SearchPacket? search,
+        IReadOnlyList<ImageAttachment> images)
+    {
+        var compareChoice = _compareChoice!;
+        var apiKey = ConfigService.Unprotect(provider.ApiKeyProtected);
+        var compareKey = ConfigService.Unprotect(compareChoice.Provider.ApiKeyProtected);
+        var conversation = _conversation.ToArray();
+
+        using var cancellation = new CancellationTokenSource();
+        _requestCancellation = cancellation;
+        ResetStream(_primaryStream);
+        ResetStream(_compareStream);
+        CompareBusyProgress.Visibility = Visibility.Visible;
+        _compareStopwatch.Restart();
+        StartStreamTimer();
+
+        try
+        {
+            var primaryTask = RunPaneAsync(
+                _primaryStream, option, provider, apiKey, prompt, search, images, conversation,
+                cancellation.Token);
+            var compareTask = RunPaneAsync(
+                _compareStream, option, compareChoice.Provider, compareKey, prompt, search, images,
+                conversation, cancellation.Token);
+
+            // 两边都要等完：一侧失败不该让另一侧的结果消失。
+            AiResult? primary = null;
+            string? primaryError = null;
+            AiResult? compare = null;
+            string? compareError = null;
+            OperationCanceledException? cancellationException = null;
+
+            try
+            {
+                primary = await primaryTask;
+            }
+            catch (OperationCanceledException exception)
+            {
+                cancellationException = exception;
+            }
+            catch (Exception exception)
+            {
+                primaryError = exception.Message;
+            }
+
+            try
+            {
+                compare = await compareTask;
+            }
+            catch (OperationCanceledException exception)
+            {
+                cancellationException ??= exception;
+            }
+            catch (Exception exception)
+            {
+                compareError = exception.Message;
+            }
+
+            var compareElapsed = _compareStopwatch.Elapsed;
+            if (compare is not null)
+            {
+                SetCompareMarkdown(AppendSources(compare.Answer, search), null);
+                CompareMetaText.Text = $"完成 · {compareElapsed.TotalSeconds:F1} 秒";
+            }
+            else if (compareError is not null)
+            {
+                SetCompareMarkdown("## 对比失败\n\n" + compareError, null);
+                CompareMetaText.Text = "对比失败";
+            }
+            else
+            {
+                SetCompareMarkdown("## 已取消\n\n请求已取消。", null);
+                CompareMetaText.Text = "已取消";
+            }
+
+            if (cancellationException is not null)
+            {
+                throw cancellationException;
+            }
+
+            if (primaryError is not null)
+            {
+                throw new InvalidOperationException(primaryError);
+            }
+
+            return primary!;
+        }
+        finally
+        {
+            StopStreamTimer();
+            CompareBusyProgress.Visibility = Visibility.Collapsed;
+            _lastRequestCancelledByUser = cancellation.IsCancellationRequested;
+            _requestCancellation = null;
+        }
+    }
+
+    // 跑一个回答栏：先流式，失败退回非流式。取消原样上抛，由调用方区分「取消/超时」。
+    private async Task<AiResult> RunPaneAsync(
+        StreamTarget target,
+        FunctionOption option,
+        ProviderConfig provider,
+        string apiKey,
+        string prompt,
+        SearchPacket? search,
+        IReadOnlyList<ImageAttachment> images,
+        IReadOnlyList<ConversationTurn> conversation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await Task.Run(() => _aiService.ExecuteStreamingAsync(
+                option,
+                prompt,
+                provider,
+                apiKey,
+                search,
+                images,
+                conversation,
+                (content, reasoning) => AppendDelta(target, content, reasoning),
+                cancellationToken));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // 不同提供商/代理对 SSE 的支持程度不一致，流式失败必须退回非流式，
+            // 否则「支持流式」本身会变成新的失败点。
+            ErrorLog.Write("流式请求失败，回退到非流式", exception);
+            ResetStream(target);
+
+            return await _aiService.ExecuteAsync(
+                option, prompt, provider, apiKey, search, images, conversation, cancellationToken);
+        }
+    }
+
+    // 在线程池线程上被调用，只做追加，不碰任何界面对象。
+    private void AppendDelta(StreamTarget target, string content, string reasoning)
     {
         lock (_streamGate)
         {
             if (content.Length > 0)
             {
-                _streamingContent.Append(content);
+                target.Content.Append(content);
             }
 
             if (reasoning.Length > 0)
             {
-                _streamingReasoning.Append(reasoning);
+                target.Reasoning.Append(reasoning);
             }
 
-            _streamDirty = true;
+            target.Dirty = true;
+        }
+    }
+
+    private void ResetStream(StreamTarget target)
+    {
+        lock (_streamGate)
+        {
+            target.Content.Clear();
+            target.Reasoning.Clear();
+            target.Dirty = false;
         }
     }
 
@@ -927,29 +1080,55 @@ public partial class MainWindow : Window
 
     private void RenderStreamingDraft()
     {
-        string content;
-        string reasoning;
+        string? primaryContent = null;
+        string? primaryReasoning = null;
+        string? compareContent = null;
+        string? compareReasoning = null;
 
         lock (_streamGate)
         {
-            if (!_streamDirty)
+            if (_primaryStream.Dirty)
             {
-                return;
+                _primaryStream.Dirty = false;
+                primaryContent = _primaryStream.Content.ToString();
+                primaryReasoning = _primaryStream.Reasoning.ToString();
             }
 
-            _streamDirty = false;
-            content = _streamingContent.ToString();
-            reasoning = _streamingReasoning.ToString();
+            if (_compareStream.Dirty)
+            {
+                _compareStream.Dirty = false;
+                compareContent = _compareStream.Content.ToString();
+                compareReasoning = _compareStream.Reasoning.ToString();
+            }
         }
 
-        ResponseMetaText.Text = $"正在生成… {content.Length} 字";
-        SetOutputMarkdown(
-            content.Length == 0 ? "正在生成回答…" : content,
-            reasoning.Length == 0 ? null : reasoning);
-        // 生成过程中让视线跟着最新内容走；完成后 SetOutputMarkdown 会回到开头。
-        OutputRichText.ScrollToEnd();
+        if (primaryContent is not null)
+        {
+            ResponseMetaText.Text = $"正在生成… {primaryContent.Length} 字";
+            SetOutputMarkdown(
+                primaryContent.Length == 0 ? "正在生成回答…" : primaryContent,
+                string.IsNullOrEmpty(primaryReasoning) ? null : primaryReasoning);
+            // 生成过程中让视线跟着最新内容走；完成后 SetOutputMarkdown 会回到开头。
+            OutputRichText.ScrollToEnd();
+        }
+
+        if (compareContent is not null)
+        {
+            CompareMetaText.Text = $"正在生成… {compareContent.Length} 字";
+            SetCompareMarkdown(
+                compareContent.Length == 0
+                    ? (string.IsNullOrEmpty(compareReasoning) ? "正在生成回答…" : "正在思考…")
+                    : compareContent,
+                null);
+            CompareRichText.ScrollToEnd();
+        }
     }
 
+    private void SetCompareMarkdown(string markdown, string? reasoning)
+    {
+        CompareRichText.Document = MarkdownRenderer.Render(markdown);
+        CompareRichText.ScrollToHome();
+    }
     // 多轮上下文不能无限增长：token 线性上涨，迟早撞上下文上限或超时。
     // 按轮数与总字数双重限制，并且保证裁剪后第一条是 user ——
     // 从中间截断会让某轮 assistant 没有对应的提问，部分提供商会直接拒绝这种序列。
@@ -992,7 +1171,9 @@ public partial class MainWindow : Window
         OutputRichText.Document = MarkdownRenderer.Render(markdown);
         OutputRichText.ScrollToHome();
 
-        if (string.IsNullOrWhiteSpace(reasoning))
+        // 对比模式下左右两栏都是完整回答，跨栏的「思考过程」展开器只会让人搞不清
+        // 它属于哪个模型，索性不显示。
+        if (string.IsNullOrWhiteSpace(reasoning) || _compareMode)
         {
             ThinkingRichText.Document = MarkdownRenderer.Render(string.Empty);
             ThinkingExpander.Visibility = Visibility.Collapsed;
@@ -1380,6 +1561,9 @@ public partial class MainWindow : Window
         ModelTabScroll.Visibility = tabs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         UpdateAttachmentTargetText();
+
+        // 模型集合变了（切换 tab、或从设置回来）：对比栏的有效性与标签都要跟着刷新。
+        ApplyCompareMode(_config.CompareMode, save: false);
     }
 
     private static bool IsSameChoice(ModelChoice left, ModelChoice? right)
@@ -1430,6 +1614,115 @@ public partial class MainWindow : Window
         public string ToolTip { get; }
 
         public bool IsActive { get; }
+    }
+
+    // ── 双模型对比 ────────────────────────────────────────────────
+
+    private void CompareModeButton_Toggled(object sender, RoutedEventArgs e)
+    {
+        ApplyCompareMode(CompareModeButton.IsChecked == true, save: true);
+    }
+
+    private void CycleCompareModelButton_Click(object sender, RoutedEventArgs e)
+    {
+        var candidates = CompareCandidates();
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        var index = candidates.FindIndex(choice => IsSameChoice(choice, _compareChoice));
+        _compareChoice = candidates[(index + 1) % candidates.Count];
+
+        _config.CompareProviderId = _compareChoice.Provider.Id;
+        _config.CompareModel = _compareChoice.Model;
+        RefreshCompareLabels();
+        SaveConfigInBackground();
+    }
+
+    private void ApplyCompareMode(bool enabled, bool save)
+    {
+        if (_applyingCompareMode)
+        {
+            return;
+        }
+
+        _applyingCompareMode = true;
+        try
+        {
+            // 只有一个已启用模型时无从对比，直接拒绝并说明原因。
+            var available = CompareCandidates().Count > 0;
+            _compareMode = enabled && available;
+
+            if (enabled && !available)
+            {
+                StatusText.Text = "需要在设置里启用至少两个模型才能对比";
+            }
+
+            CompareModeButton.IsChecked = _compareMode;
+            ComparePane.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
+            CompareSplitterColumn.Width = _compareMode ? new GridLength(10) : new GridLength(0);
+            CompareColumn.Width = _compareMode
+                ? new GridLength(1, GridUnitType.Star)
+                : new GridLength(0);
+            PrimaryModelText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_compareMode)
+            {
+                RefreshCompareLabels();
+                PrimaryModelText.Text = _currentProvider is null
+                    ? string.Empty
+                    : $"{_currentProvider.Name} · {_currentProvider.SelectedModel}";
+            }
+
+            if (save)
+            {
+                _config.CompareMode = _compareMode;
+                SaveConfigInBackground();
+            }
+        }
+        finally
+        {
+            _applyingCompareMode = false;
+        }
+    }
+
+    // 右栏能选的模型：已启用且不等于左栏当前模型。
+    private List<ModelChoice> CompareCandidates()
+    {
+        var primary = CurrentPrimaryChoice();
+        return _modelChoices.Where(choice => !IsSameChoice(choice, primary)).ToList();
+    }
+
+    private ModelChoice? CurrentPrimaryChoice()
+    {
+        return _modelChoices.FirstOrDefault(choice =>
+                   _currentProvider is not null &&
+                   choice.Provider.Id == _currentProvider.Id &&
+                   choice.Model.Equals(_currentProvider.SelectedModel, StringComparison.OrdinalIgnoreCase))
+               ?? _modelChoices.FirstOrDefault();
+    }
+
+    private void RefreshCompareLabels()
+    {
+        var candidates = CompareCandidates();
+        if (candidates.Count == 0)
+        {
+            _compareChoice = null;
+            CompareModelText.Text = "需要在设置里启用第二个模型";
+            CompareModelText.ToolTip = null;
+            CycleCompareModelButton.IsEnabled = false;
+            return;
+        }
+
+        var stored = candidates.FirstOrDefault(choice =>
+            choice.Provider.Id == _config.CompareProviderId &&
+            choice.Model.Equals(_config.CompareModel, StringComparison.OrdinalIgnoreCase));
+
+        _compareChoice = stored ?? candidates[0];
+        CompareModelText.Text = $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
+        CompareModelText.ToolTip = BuildModelTabToolTip(_compareChoice);
+        CycleCompareModelButton.IsEnabled = candidates.Count > 1;
     }
 
     private void ApplyModelChoice(ModelChoice choice)
