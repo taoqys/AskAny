@@ -64,11 +64,23 @@ public class ModelCapabilitiesTests
         Assert.False(plainModel.SupportsReasoning);
     }
 
+    // 由「支持推理」不能推出「支持图片」：o1-mini / o3-mini 都是纯文本。
     [Fact]
-    public void ReasoningFamilyIsTreatedAsVisionCapableToo()
+    public void ReasoningFamilyDoesNotImplyVision()
     {
-        var o1 = ModelCapabilities.Infer("o1-mini");
-        Assert.True(o1.SupportsReasoning);
-        Assert.True(o1.SupportsVision);
+        var future = ModelCapabilities.Infer("o3-ultra");
+
+        Assert.True(future.SupportsReasoning);
+        Assert.False(future.SupportsVision);
+    }
+
+    // 快照优先于启发式：o1-mini 在快照里是「支持推理、不支持图片」，与真实情况一致。
+    [Fact]
+    public void SnapshotTakesPrecedenceOverHeuristics()
+    {
+        var o1Mini = ModelCapabilities.Infer("o1-mini");
+
+        Assert.True(o1Mini.SupportsReasoning);
+        Assert.False(o1Mini.SupportsVision);
     }
 }

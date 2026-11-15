@@ -59,8 +59,11 @@ public static class ModelCapabilities
         }
 
         var lower = id.ToLowerInvariant();
+
+        // 注意：由「支持推理」不能推出「支持图片」—— o1-mini / o3-mini 都是纯文本。
+        // 所以图片能力只看命名标记，宁可漏判。
         return new ModelCapability(
-            MatchesAny(lower, VisionMarkers) || IsReasoningFamily(lower),
+            MatchesAny(lower, VisionMarkers),
             MatchesAny(lower, ReasoningMarkers) || IsReasoningFamily(lower));
     }
 
