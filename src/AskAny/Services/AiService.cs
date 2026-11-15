@@ -332,10 +332,15 @@ public sealed class AiService
 
             if (!isThinking)
             {
-                body["reasoning"] = new Dictionary<string, object?>
+                // 「始终思考」的模型拒绝 effort=none（智谱 glm-5.3-flashx 会返回 1210），
+                // 对它们干脆不发这个字段，让服务端按默认行为走。
+                if (CanDisableReasoning(provider))
                 {
-                    ["effort"] = "none"
-                };
+                    body["reasoning"] = new Dictionary<string, object?>
+                    {
+                        ["effort"] = "none"
+                    };
+                }
             }
             else if (provider.SupportsReasoningControl)
             {
@@ -397,7 +402,7 @@ public sealed class AiService
         if (!isThinking)
         {
             chatBody["temperature"] = 0.6;
-            if (provider.SupportsReasoningControl)
+            if (provider.SupportsReasoningControl && CanDisableReasoning(provider))
             {
                 chatBody["reasoning_effort"] = "none";
             }
@@ -408,6 +413,12 @@ public sealed class AiService
         }
 
         return chatBody;
+    }
+
+    // 未知时按「可以关闭」处理，保持既有行为不变；只有能力表明确说不行才跳过。
+    private static bool CanDisableReasoning(ProviderConfig provider)
+    {
+        return ModelCapabilities.Infer(provider.SelectedModel).CanDisableReasoning is not false;
     }
 
     private static object BuildResponsesContent(

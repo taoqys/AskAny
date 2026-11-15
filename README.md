@@ -54,6 +54,8 @@ AskAny 是一个使用 WPF 和 .NET 8 构建的 Windows AI 快捷助手。双击
 
 能力数据来自内置的 [models.dev](https://models.dev) 快照（`src/AskAny/Assets/model-capabilities.json`，覆盖数千个模型），离线可用；快照里没有的新模型按命名规则兜底。模型列表与其能力可在设置里手动修正。
 
+能力表还记录「该模型是否允许关闭推理」。像智谱 `glm-5.3-flashx` 这类**始终思考**的模型会拒绝 `reasoning_effort=none`（返回 1210），AskAny 对它们不再发送该字段，普通回答也能正常返回。
+
 DeepSeek Responses 预设使用 `https://api.deepseek.com`，遵循 DeepSeek 的 `reasoning.effort` 规则：深度思考模式使用配置的强度，其他模式显式发送 `none`，避免默认开启思考。
 
 知乎搜索调用 `https://developer.zhihu.com/api/v1/content/zhihu_search`，需要 Bearer 鉴权加秒级时间戳，单次最多返回 10 条。时间戳与服务端相差超过 10 分钟会返回 20001，因此本机时间需要准确。

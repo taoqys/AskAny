@@ -1292,12 +1292,19 @@ public partial class MainWindow : Window
 
             // 能力表能告诉我们「当前模型是否支持推理」。选到「深度思考」但模型不支持时
             // 提前说清楚，免得用户以为它真在深思。
-            if (option.Mode == WorkflowMode.Think &&
-                _currentProvider is { } provider &&
-                !string.IsNullOrWhiteSpace(provider.SelectedModel) &&
-                !ModelCapabilities.Infer(provider.SelectedModel).SupportsReasoning)
+            if (_currentProvider is { } provider && !string.IsNullOrWhiteSpace(provider.SelectedModel))
             {
-                StatusText.Text = $"已选择：{option.Name}（当前模型可能不支持推理）";
+                var capability = ModelCapabilities.Infer(provider.SelectedModel);
+
+                if (option.Mode == WorkflowMode.Think && !capability.SupportsReasoning)
+                {
+                    StatusText.Text = $"已选择：{option.Name}（当前模型可能不支持推理）";
+                }
+                else if (option.Mode == WorkflowMode.Answer && capability.CanDisableReasoning == false)
+                {
+                    // 这类模型关不掉思考：普通回答也会先思考，耗时会长一些。
+                    StatusText.Text = $"已选择：{option.Name}（该模型始终思考，可能较慢）";
+                }
             }
         }
 

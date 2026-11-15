@@ -4,10 +4,14 @@ using System.Text.Json;
 
 namespace AskAny.Services;
 
-// 一个模型的「能力」——目前是 AskAny 会真正用到的两项。
-public readonly record struct ModelCapability(bool SupportsVision, bool SupportsReasoning)
+// 一个模型的「能力」——目前是 AskAny 会真正用到的几项。
+// CanDisableReasoning 为 null 表示未知（此时按「可以关闭」处理，保持原有行为）。
+public readonly record struct ModelCapability(
+    bool SupportsVision,
+    bool SupportsReasoning,
+    bool? CanDisableReasoning)
 {
-    public static readonly ModelCapability Unknown = new(false, false);
+    public static readonly ModelCapability Unknown = new(false, false, null);
 
     public bool IsKnown => SupportsVision || SupportsReasoning;
 }
@@ -62,9 +66,11 @@ public static class ModelCapabilities
 
         // 注意：由「支持推理」不能推出「支持图片」—— o1-mini / o3-mini 都是纯文本。
         // 所以图片能力只看命名标记，宁可漏判。
+        // 关闭推理的能力在快照外无从判断，返回 null（按可关闭处理，不改变既有行为）。
         return new ModelCapability(
             MatchesAny(lower, VisionMarkers),
-            MatchesAny(lower, ReasoningMarkers) || IsReasoningFamily(lower));
+            MatchesAny(lower, ReasoningMarkers) || IsReasoningFamily(lower),
+            null);
     }
 
     // o1 / o3 / o4 系列既是多模态也支持推理；用前缀判断避免 "o1" 误伤其它 id。
@@ -89,6 +95,11 @@ public static class ModelCapabilities
         return false;
     }
 
+    private static bool IsTrue(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+    }
+
     private static Dictionary<string, ModelCapability> LoadSnapshot()
     {
         var result = new Dictionary<string, ModelCapability>(StringComparer.OrdinalIgnoreCase);
@@ -105,11 +116,22 @@ public static class ModelCapabilities
             using var document = JsonDocument.Parse(stream);
             foreach (var property in document.RootElement.EnumerateObject())
             {
-                var vision = property.Value.TryGetProperty("v", out var visionElement) &&
-                             visionElement.ValueKind == JsonValueKind.True;
-                var reasoning = property.Value.TryGetProperty("r", out var reasoningElement) &&
-                                reasoningElement.ValueKind == JsonValueKind.True;
-                result[property.Name] = new ModelCapability(vision, reasoning);
+                var vision = IsTrue(property.Value, "v");
+                var reasoning = IsTrue(property.Value, "r");
+
+                // d: true=可以关闭推理，false=始终思考，null/缺失=未知
+                bool? canDisable = null;
+                if (property.Value.TryGetProperty("d", out var disableElement))
+                {
+                    canDisable = disableElement.ValueKind switch
+                    {
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        _ => null
+                    };
+                }
+
+                result[property.Name] = new ModelCapability(vision, reasoning, canDisable);
             }
         }
         catch (JsonException exception)
