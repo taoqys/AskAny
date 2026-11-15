@@ -37,7 +37,7 @@ public class ConfigServiceMigrationTests
 
         Assert.Equal(2, config.Functions.Count);
         Assert.Equal(
-            new[] { "回答此问题", "联网检索" },
+            new[] { "回答", "联网检索" },
             config.Functions.Select(function => function.Name).ToArray());
 
         var network = config.Functions[1];
@@ -95,7 +95,7 @@ public class ConfigServiceMigrationTests
 
         var config = await ConfigFixture.NormalizeAsync(json);
 
-        Assert.Equal(5, config.Functions.Count);
+        Assert.Equal(4, config.Functions.Count);
         Assert.Contains(config.Functions, function => function.SystemPrompt == customNews);
         Assert.Contains(config.Functions, function => function.SystemPrompt == customOnline);
 
