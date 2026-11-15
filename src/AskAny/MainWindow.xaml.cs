@@ -50,7 +50,6 @@ public partial class MainWindow : Window
     private ModelChoice? _compareChoice;
     private bool _compareMode;
     private bool _applyingCompareMode;
-    private readonly System.Diagnostics.Stopwatch _compareStopwatch = new();
 
     // 思考开关：与功能项解耦，跨功能共享，状态存配置。
     private bool _thinkingEnabled;
@@ -702,12 +701,10 @@ public partial class MainWindow : Window
         ResponseMetaText.Text = "正在准备…";
         if (_compareMode)
         {
-            PrimaryModelText.Text = $"{provider.Name} · {provider.SelectedModel}";
-            PrimaryMetaText.Text = "生成中…";
+            PrimaryModelText.Text = $"{provider.Name} · {provider.SelectedModel} · 生成中…";
             CompareModelText.Text = _compareChoice is null
                 ? "未选择"
-                : $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
-            CompareMetaText.Text = "等待中…";
+                : $"{_compareChoice.Provider.Name} · {_compareChoice.Model} · 等待中…";
             ResetStream(_compareStream);
             SetCompareMarkdown("正在生成回答…", null);
         }
@@ -724,6 +721,7 @@ public partial class MainWindow : Window
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         SearchPacket? search = null;
+        var searchElapsed = TimeSpan.Zero;
 
         try
         {
@@ -732,13 +730,16 @@ public partial class MainWindow : Window
             if (option.SearchBackend != SearchBackend.None)
             {
                 search = await SearchByBackendAsync(option.SearchBackend, prompt);
+                searchElapsed = stopwatch.Elapsed;
                 ResponseMetaText.Text = $"已检索 {search.Sources.Count} 条资料，正在整理…";
                 SetOutputMarkdown("正在结合检索资料生成回答…", null);
             }
 
-            var result = _compareMode && _compareChoice is not null
+            // 每栏各自计时：从该栏请求真正发出开始，到它自己完成结束。
+            var outcome = _compareMode && _compareChoice is not null
                 ? await ExecuteCompareAsync(option, prompt, provider, search, images)
                 : await ExecuteWithStreamingAsync(option, prompt, provider, search, images);
+            var result = outcome.Result;
 
             var displayAnswer = AppendSources(result.Answer, search);
             var reasoning = string.IsNullOrWhiteSpace(result.Reasoning) ? null : result.Reasoning;
@@ -750,14 +751,20 @@ public partial class MainWindow : Window
             _conversation.Add(new ConversationTurn("assistant", result.Answer));
             TrimConversation();
             stopwatch.Stop();
-            var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
-            ResponseMetaText.Text =
-                $"{stopwatch.Elapsed.TotalSeconds:F1} 秒{sourceText} · Enter 追问 · ← 返回";
 
             if (_compareMode)
             {
-                PrimaryMetaText.Text = $"{stopwatch.Elapsed.TotalSeconds:F1} 秒";
+                PrimaryModelText.Text =
+                    $"{provider.Name} · {provider.SelectedModel} · {FormatMetrics(outcome)}";
             }
+            else
+            {
+                var searchText = search is null
+                    ? string.Empty
+                    : $" · 检索 {searchElapsed.TotalSeconds:F1}s";
+                ResponseMetaText.Text = $"{FormatMetrics(outcome)}{searchText} · Enter 追问";
+            }
+
             StatusText.Text = "执行完成";
 
             // 首轮提问时才确定话题 id 与标题，避免空话题也占一个 id。
@@ -780,7 +787,10 @@ public partial class MainWindow : Window
                 ImageCount = images.Count,
                 SourceCount = search?.Sources.Count ?? 0,
                 TopicId = _topicId,
-                TopicTitle = _topicTitle
+                TopicTitle = _topicTitle,
+                PromptTokens = result.Usage?.PromptTokens ?? 0,
+                CompletionTokens = result.Usage?.CompletionTokens ?? 0,
+                TimeToFirstTokenMs = (int)(result.TimeToFirstToken?.TotalMilliseconds ?? 0)
             });
         }
         catch (OperationCanceledException) when (_lastRequestCancelledByUser)
@@ -981,7 +991,7 @@ public partial class MainWindow : Window
     //
     // 单模型和双模型对比共用这一套：一个「栏」就是一个 StreamTarget，
     // 两条流各写各的缓冲区，渲染时一次读回两份。
-    private async Task<AiResult> ExecuteWithStreamingAsync(
+    private async Task<PaneOutcome> ExecuteWithStreamingAsync(
         FunctionOption option,
         string prompt,
         ProviderConfig provider,
@@ -1012,7 +1022,7 @@ public partial class MainWindow : Window
 
     // 双模型对比：同一个问题、同一份检索资料，同时问两个模型，各写自己那一栏。
     // 检索只做一次（两个模型看到同样的资料才可比），右侧答案只展示、不写历史。
-    private async Task<AiResult> ExecuteCompareAsync(
+    private async Task<PaneOutcome> ExecuteCompareAsync(
         FunctionOption option,
         string prompt,
         ProviderConfig provider,
@@ -1029,7 +1039,6 @@ public partial class MainWindow : Window
         ResetStream(_primaryStream);
         ResetStream(_compareStream);
         CompareBusyProgress.Visibility = Visibility.Visible;
-        _compareStopwatch.Restart();
         StartStreamTimer();
 
         try
@@ -1042,9 +1051,9 @@ public partial class MainWindow : Window
                 conversation, cancellation.Token);
 
             // 两边都要等完：一侧失败不该让另一侧的结果消失。
-            AiResult? primary = null;
+            PaneOutcome? primary = null;
             string? primaryError = null;
-            AiResult? compare = null;
+            PaneOutcome? compare = null;
             string? compareError = null;
             OperationCanceledException? cancellationException = null;
 
@@ -1074,21 +1083,22 @@ public partial class MainWindow : Window
                 compareError = exception.Message;
             }
 
-            var compareElapsed = _compareStopwatch.Elapsed;
+            // 右栏用「它自己的」耗时与用量，不能拿两栏的总时间充数。
             if (compare is not null)
             {
-                SetCompareMarkdown(AppendSources(compare.Answer, search), null);
-                CompareMetaText.Text = $"完成 · {compareElapsed.TotalSeconds:F1} 秒";
+                SetCompareMarkdown(AppendSources(compare.Result.Answer, search), null);
+                CompareModelText.Text =
+                    $"{compareChoice.Provider.Name} · {compareChoice.Model} · {FormatMetrics(compare)}";
             }
             else if (compareError is not null)
             {
                 SetCompareMarkdown("## 对比失败\n\n" + compareError, null);
-                CompareMetaText.Text = "对比失败";
+                CompareModelText.Text = $"{compareChoice.Provider.Name} · {compareChoice.Model} · 失败";
             }
             else
             {
                 SetCompareMarkdown("## 已取消\n\n请求已取消。", null);
-                CompareMetaText.Text = "已取消";
+                CompareModelText.Text = $"{compareChoice.Provider.Name} · {compareChoice.Model} · 已取消";
             }
 
             if (cancellationException is not null)
@@ -1112,8 +1122,28 @@ public partial class MainWindow : Window
         }
     }
 
+    // 一栏的结果 + 它自己的耗时（从该栏请求发出到该栏完成）。
+    private sealed record PaneOutcome(AiResult Result, TimeSpan Elapsed);
+
+    // 回答页每栏那一行指标：耗时 · 首字 · 输入→输出 token。
+    private static string FormatMetrics(PaneOutcome outcome)
+    {
+        var parts = new List<string> { $"{outcome.Elapsed.TotalSeconds:F1}s" };
+
+        if (outcome.Result.TimeToFirstToken is { } firstToken)
+        {
+            parts.Add($"首字 {firstToken.TotalSeconds:F1}s");
+        }
+
+        parts.Add(outcome.Result.Usage is { HasAny: true } usage
+            ? $"{usage.PromptTokens}→{usage.CompletionTokens} tok"
+            : "tok —");
+
+        return string.Join(" · ", parts);
+    }
+
     // 跑一个回答栏：先流式，失败退回非流式。取消原样上抛，由调用方区分「取消/超时」。
-    private async Task<AiResult> RunPaneAsync(
+    private async Task<PaneOutcome> RunPaneAsync(
         StreamTarget target,
         FunctionOption option,
         ProviderConfig provider,
@@ -1124,9 +1154,12 @@ public partial class MainWindow : Window
         IReadOnlyList<ConversationTurn> conversation,
         CancellationToken cancellationToken)
     {
+        // 每栏独立秒表：这是「两个回答计时分开」的唯一正确做法。
+        var paneStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         try
         {
-            return await Task.Run(() => _aiService.ExecuteStreamingAsync(
+            var result = await Task.Run(() => _aiService.ExecuteStreamingAsync(
                 option,
                 prompt,
                 provider,
@@ -1137,6 +1170,9 @@ public partial class MainWindow : Window
                 (content, reasoning) => AppendDelta(target, content, reasoning),
                 _thinkingEnabled,
                 cancellationToken));
+
+            paneStopwatch.Stop();
+            return new PaneOutcome(result, paneStopwatch.Elapsed);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -1145,9 +1181,12 @@ public partial class MainWindow : Window
             ErrorLog.Write("流式请求失败，回退到非流式", exception);
             ResetStream(target);
 
-            return await _aiService.ExecuteAsync(
+            var result = await _aiService.ExecuteAsync(
                 option, prompt, provider, apiKey, search, images, conversation,
                 _thinkingEnabled, cancellationToken);
+
+            paneStopwatch.Stop();
+            return new PaneOutcome(result, paneStopwatch.Elapsed);
         }
     }
 
@@ -1216,7 +1255,17 @@ public partial class MainWindow : Window
 
         if (primaryContent is not null)
         {
-            ResponseMetaText.Text = $"正在生成… {primaryContent.Length} 字";
+            if (_compareMode)
+            {
+                PrimaryModelText.Text = _currentProvider is null
+                    ? $"左栏 · 生成中 {primaryContent.Length} 字"
+                    : $"{_currentProvider.Name} · {_currentProvider.SelectedModel} · 生成中 {primaryContent.Length} 字";
+            }
+            else
+            {
+                ResponseMetaText.Text = $"正在生成… {primaryContent.Length} 字";
+            }
+
             SetOutputMarkdown(
                 primaryContent.Length == 0 ? "正在生成回答…" : primaryContent,
                 string.IsNullOrEmpty(primaryReasoning) ? null : primaryReasoning);
@@ -1226,7 +1275,9 @@ public partial class MainWindow : Window
 
         if (compareContent is not null)
         {
-            CompareMetaText.Text = $"正在生成… {compareContent.Length} 字";
+            CompareModelText.Text = _compareChoice is null
+                ? $"右栏 · 生成中 {compareContent.Length} 字"
+                : $"{_compareChoice.Provider.Name} · {_compareChoice.Model} · 生成中 {compareContent.Length} 字";
             SetCompareMarkdown(
                 compareContent.Length == 0
                     ? (string.IsNullOrEmpty(compareReasoning) ? "正在生成回答…" : "正在思考…")
@@ -1881,15 +1932,13 @@ public partial class MainWindow : Window
         ResponseModeText.Text = "回答 · 双模型对比";
         ResponseMetaText.Text = "1.8 秒 · Enter 追问 · ← 返回";
 
-        // 标签取自实际选中的模型，保证截图里的「两栏模型」和底栏选择框一致。
+        // 每栏一行：模型 · 耗时 · 首字 · token，与真实结果一致。
         PrimaryModelText.Text = _currentProvider is null
-            ? "左栏"
-            : $"{_currentProvider.Name} · {_currentProvider.SelectedModel}";
-        PrimaryMetaText.Text = "完成 · 1.8 秒";
+            ? "左栏 · 1.8s · 首字 0.4s · 480→210 tok"
+            : $"{_currentProvider.Name} · {_currentProvider.SelectedModel} · 1.8s · 首字 0.4s · 480→210 tok";
         CompareModelText.Text = _compareChoice is null
-            ? "右栏"
-            : $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
-        CompareMetaText.Text = "完成 · 2.1 秒";
+            ? "右栏 · 2.1s · 首字 0.6s · 512→240 tok"
+            : $"{_compareChoice.Provider.Name} · {_compareChoice.Model} · 2.1s · 首字 0.6s · 512→240 tok";
 
         SetOutputMarkdown(
             """
@@ -1949,9 +1998,8 @@ public partial class MainWindow : Window
                 : new GridLength(0);
 
             PrimaryModelText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
-            PrimaryMetaText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
 
-            // 对比模式下两栏各自显示耗时，共享的那行元信息就藏起来，避免和两栏打架。
+            // 对比模式下两栏各自显示指标，共享的那行元信息就藏起来，避免和两栏打架。
             ResponseMetaText.Visibility = _compareMode ? Visibility.Collapsed : Visibility.Visible;
 
             // 模型选择框：单栏一个，对比模式两个。
