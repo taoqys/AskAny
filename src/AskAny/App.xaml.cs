@@ -102,7 +102,8 @@ public partial class App : Application
                 configService,
                 previewConfig,
                 new AiService(_httpClient),
-                new SearchService(_httpClient))
+                new SearchService(_httpClient),
+                new ModelCatalogService(_httpClient))
             {
                 WindowStartupLocation = WindowStartupLocation.CenterScreen
             };
@@ -163,7 +164,8 @@ public partial class App : Application
             configService,
             new AiService(_httpClient),
             new SearchService(_httpClient),
-            historyService);
+            historyService,
+            new ModelCatalogService(_httpClient));
 
         // --screenshot <输出> [功能索引]：可选指定选中哪一项，
         // 用于截到来源切换条这类「只在特定选中项下出现」的界面。

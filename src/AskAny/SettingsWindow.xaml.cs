@@ -17,6 +17,7 @@ public partial class SettingsWindow : Window
     private readonly ConfigService _configService;
     private readonly AiService _aiService;
     private readonly SearchService _searchService;
+    private readonly ModelCatalogService _modelCatalogService;
     private readonly AppConfig _config;
     private readonly List<ProviderConfig> _providers;
     private readonly List<FunctionOption> _functions;
@@ -36,13 +37,15 @@ public partial class SettingsWindow : Window
         ConfigService configService,
         AppConfig config,
         AiService aiService,
-        SearchService searchService)
+        SearchService searchService,
+        ModelCatalogService modelCatalogService)
     {
         InitializeComponent();
 
         _configService = configService;
         _aiService = aiService;
         _searchService = searchService;
+        _modelCatalogService = modelCatalogService;
         _config = config;
         _providers = config.Providers.Count == 0
             ? ProviderCatalog.CreateDefaultProviders()
@@ -145,6 +148,10 @@ public partial class SettingsWindow : Window
                 ConfigService.Unprotect(_selectedProvider!.ApiKeyProtected));
 
             SettingsStatusText.Text = "连接成功";
+
+            // 连接刚验证过，顺手把模型列表与能力拉下来 —— 用户要的「自动获取」。
+            // 失败就静默（不打断「连接成功」这条好消息），只记日志。
+            SafeTask.Run(() => FetchModelsAsync(manual: false), "自动获取模型列表");
         }
         catch (Exception exception)
         {
@@ -344,6 +351,57 @@ public partial class SettingsWindow : Window
         return FunctionCatalog.IsLegacySearchMode(function.Mode)
             ? WorkflowMode.SearchNetwork
             : function.Mode;
+    }
+
+    private async void FetchModelsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await FetchModelsAsync(manual: true);
+    }
+
+    // 从供应商的 /models 拉实时列表，并按内置能力表标注支持图片的模型。
+    // 结果写回表单而不是直接改 provider：保存与否仍由用户决定。
+    private async Task FetchModelsAsync(bool manual)
+    {
+        if (!TrySaveCurrentProvider() || _selectedProvider is null)
+        {
+            return;
+        }
+
+        var provider = _selectedProvider;
+        FetchModelsButton.IsEnabled = false;
+        if (manual)
+        {
+            ModelFetchStatusText.Text = "正在获取模型列表…";
+        }
+
+        try
+        {
+            var result = await _modelCatalogService.FetchAsync(
+                provider,
+                ConfigService.Unprotect(provider.ApiKeyProtected));
+
+            ModelsBox.Text = string.Join(Environment.NewLine, result.Models);
+            VisionModelsBox.Text = string.Join(Environment.NewLine, result.VisionModels);
+
+            ModelFetchStatusText.Text =
+                $"已获取 {result.Models.Count} 个模型：{result.VisionModels.Count} 个支持图片、" +
+                $"{result.ReasoningModels.Count} 个支持推理。能力来自内置快照，可手动修改。";
+        }
+        catch (Exception exception)
+        {
+            if (manual)
+            {
+                ModelFetchStatusText.Text = exception.Message;
+            }
+            else
+            {
+                ErrorLog.Write("自动获取模型列表", exception);
+            }
+        }
+        finally
+        {
+            FetchModelsButton.IsEnabled = true;
+        }
     }
 
     private async void ZhihuQuotaButton_Click(object sender, RoutedEventArgs e)

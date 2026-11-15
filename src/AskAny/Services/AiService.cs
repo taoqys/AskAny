@@ -43,7 +43,7 @@ public sealed class AiService
 
         if (!response.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException(DescribeFailure(response.StatusCode, payload));
+            throw new InvalidOperationException(HttpFailure.Describe(response.StatusCode, payload));
         }
 
         return provider.Protocol switch
@@ -82,7 +82,7 @@ public sealed class AiService
         if (!response.IsSuccessStatusCode)
         {
             var errorPayload = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException(DescribeFailure(response.StatusCode, errorPayload));
+            throw new InvalidOperationException(HttpFailure.Describe(response.StatusCode, errorPayload));
         }
 
         using var bodyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -200,33 +200,6 @@ public sealed class AiService
             "application/json");
 
         return request;
-    }
-
-    // 把 HTTP 失败翻译成「下一步该做什么」，而不是把原始 payload 甩给用户。
-    private static string DescribeFailure(HttpStatusCode status, string payload)
-    {
-        var code = (int)status;
-        var hint = status switch
-        {
-            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>
-                "认证失败：请到「设置 → 模型服务」检查 API Key。",
-            HttpStatusCode.NotFound =>
-                "接口地址或模型不存在：请检查「接口地址」与模型名。",
-            HttpStatusCode.TooManyRequests =>
-                "触发限流或额度不足：稍后重试，或检查账户额度。",
-            HttpStatusCode.RequestEntityTooLarge =>
-                "请求内容过大：减少图片或开启新对话后重试。",
-            HttpStatusCode.BadRequest =>
-                "请求被拒绝：模型名或参数可能不被该提供商支持。",
-            _ when code >= 500 =>
-                "服务端错误：稍后重试。",
-            _ => null
-        };
-
-        var detail = Shorten(payload);
-        return hint is null
-            ? $"模型请求失败（{code}）：{detail}"
-            : $"模型请求失败（{code}）：{hint}　原始响应：{detail}";
     }
 
     private static (string? Content, string? Reasoning) ParseStreamChunk(
@@ -589,12 +562,6 @@ public sealed class AiService
                "\n请只把下列资料作为外部事实来源，并用 [1]、[2] 标注来源编号；若资料不足请明确说明。" +
                "\n\n检索主题：" + search.Query +
                "\n\n联网资料：\n" + string.Join("\n\n", sources);
-    }
-
-    private static string Shorten(string value)
-    {
-        var normalized = value.ReplaceLineEndings(" ").Trim();
-        return normalized.Length <= 320 ? normalized : normalized[..320] + "…";
     }
 
     private sealed record ChatMessage(

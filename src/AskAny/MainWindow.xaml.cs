@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private readonly AiService _aiService;
     private readonly SearchService _searchService;
     private readonly HistoryService _historyService;
+    private readonly ModelCatalogService _modelCatalogService;
     private List<FunctionOption> _functions = FunctionCatalog.CreateDefaultFunctions();
 
     private AppConfig _config = new();
@@ -62,7 +63,8 @@ public partial class MainWindow : Window
         ConfigService configService,
         AiService aiService,
         SearchService searchService,
-        HistoryService historyService)
+        HistoryService historyService,
+        ModelCatalogService modelCatalogService)
     {
         InitializeComponent();
 
@@ -70,6 +72,7 @@ public partial class MainWindow : Window
         _aiService = aiService;
         _searchService = searchService;
         _historyService = historyService;
+        _modelCatalogService = modelCatalogService;
 
         FunctionList.ItemsSource = _functions;
         FunctionList.SelectedIndex = 0;
@@ -1286,6 +1289,16 @@ public partial class MainWindow : Window
         if (FunctionList.SelectedItem is FunctionOption option)
         {
             StatusText.Text = $"已选择：{option.Name}，Enter 执行";
+
+            // 能力表能告诉我们「当前模型是否支持推理」。选到「深度思考」但模型不支持时
+            // 提前说清楚，免得用户以为它真在深思。
+            if (option.Mode == WorkflowMode.Think &&
+                _currentProvider is { } provider &&
+                !string.IsNullOrWhiteSpace(provider.SelectedModel) &&
+                !ModelCapabilities.Infer(provider.SelectedModel).SupportsReasoning)
+            {
+                StatusText.Text = $"已选择：{option.Name}（当前模型可能不支持推理）";
+            }
         }
 
         RefreshSourceStrip();
@@ -1402,7 +1415,8 @@ public partial class MainWindow : Window
                 _configService,
                 _config.Clone(),
                 _aiService,
-                _searchService)
+                _searchService,
+                _modelCatalogService)
             {
                 Owner = this
             };

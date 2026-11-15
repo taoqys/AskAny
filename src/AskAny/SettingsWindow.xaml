@@ -262,7 +262,22 @@
                                         Padding="16,14">
                                     <StackPanel>
                                         <TextBlock Style="{StaticResource SectionTitle}" Text="可用模型" />
-                                        <TextBlock Style="{StaticResource FieldLabel}" Text="模型列表（每行一个）" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Style="{StaticResource FieldLabel}" Text="模型列表（每行一个）" />
+                                            <Button x:Name="FetchModelsButton"
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Bottom"
+                                                    Margin="0,0,0,4"
+                                                    Style="{StaticResource SecondaryButton}"
+                                                    Padding="10,4"
+                                                    Content="从供应商获取"
+                                                    ToolTip="调用提供商的 /models 接口拉取实时模型列表，并按内置能力表自动标注支持图片的模型"
+                                                    Click="FetchModelsButton_Click" />
+                                        </Grid>
                                         <TextBox x:Name="ModelsBox"
                                                  Height="132"
                                                  Padding="11,8"
@@ -273,6 +288,11 @@
                                                  FontFamily="Cascadia Mono, Consolas"
                                                  FontSize="13"
                                                  Style="{StaticResource FormField}" />
+                                        <TextBlock x:Name="ModelFetchStatusText"
+                                                   Margin="0,4,0,0"
+                                                   FontSize="11.5"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource MutedBrush}" />
                                         <TextBlock Style="{StaticResource FieldLabel}" Text="支持图片的模型（每行一个）" />
                                         <TextBox x:Name="VisionModelsBox"
                                                  Height="86"
