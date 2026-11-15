@@ -833,16 +833,17 @@ public partial class MainWindow : Window
     // 只有选中检索类功能时才显示来源切换条；其余功能没有可切换的来源。
     private void RefreshSourceStrip()
     {
-        var isSearch = FunctionList.SelectedItem is FunctionOption option && IsSearchFunction(option);
+        var isSearch = FunctionList.SelectedItem is FunctionOption selectedFunction &&
+                       IsSearchFunction(selectedFunction);
 
         SourceStrip.Visibility = isSearch ? Visibility.Visible : Visibility.Collapsed;
 
         if (isSearch)
         {
-            var option = (FunctionOption)FunctionList.SelectedItem;
-            ApplySourceChip(SourceGeneralChip, option.SearchBackend == SearchBackend.TavilyGeneral);
-            ApplySourceChip(SourceNewsChip, option.SearchBackend == SearchBackend.TavilyNews);
-            ApplySourceChip(SourceZhihuChip, option.SearchBackend == SearchBackend.Zhihu);
+            var current = (FunctionOption)FunctionList.SelectedItem;
+            ApplySourceChip(SourceGeneralChip, current.SearchBackend == SearchBackend.TavilyGeneral);
+            ApplySourceChip(SourceNewsChip, current.SearchBackend == SearchBackend.TavilyNews);
+            ApplySourceChip(SourceZhihuChip, current.SearchBackend == SearchBackend.Zhihu);
         }
 
         RefreshThinkingChips();
@@ -1869,6 +1870,49 @@ public partial class MainWindow : Window
 
         ApplyModelChoice(nextPrimary);
     }
+    // 仅供 CI 截图：把面板切到「对比模式」并填两段示例回答。
+    // 纯本地渲染、不发任何请求，用来核对左右分栏的布局。
+    public void ShowComparePreview()
+    {
+        ApplyCompareMode(true, save: false);
+
+        ResponsePanel.Visibility = Visibility.Visible;
+        FunctionList.Visibility = Visibility.Collapsed;
+        ResponseModeText.Text = "回答 · 双模型对比";
+        ResponseMetaText.Text = "1.8 秒 · Enter 追问 · ← 返回";
+
+        PrimaryModelText.Text = "OpenAI · gpt-4.1-mini";
+        PrimaryMetaText.Text = "完成 · 1.8 秒";
+        CompareModelText.Text = "DeepSeek · deepseek-flash";
+        CompareMetaText.Text = "完成 · 2.1 秒";
+
+        SetOutputMarkdown(
+            """
+            ## 要点
+
+            左栏示例：**先给结论，再补一句理由**。
+
+            - 对比模式下两栏各自流式渲染
+            - 检索只做一次，两边看到同样的资料
+
+            行内公式 $E = mc^2$ 也能正常渲染。
+            """,
+            null);
+
+        SetCompareMarkdown(
+            """
+            ## 要点
+
+            右栏示例：同一个问题，另一个模型的表述。
+
+            - 用语更直白一些
+            - 结论顺序略有不同
+
+            行内公式 $E = mc^2$ 同样正常。
+            """,
+            null);
+    }
+
     // ── 双模型对比 ────────────────────────────────────────────────
 
     private void CompareModeButton_Toggled(object sender, RoutedEventArgs e)
