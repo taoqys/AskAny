@@ -85,6 +85,7 @@ public sealed class ConfigService
         config.Functions = NormalizeFunctions(config.Functions);
         config.Functions = ConsolidateFunctions(config, config.Functions);
         config.Functions = MergeAnswerAndExplain(config, config.Functions);
+        config.Functions = MergeThinkingIntoAnswer(config, config.Functions);
 
         // 双击间隔夹到钩子允许的范围内：配置被手改成 0 或极大值时不该让手势失灵。
         config.HotkeyDoubleTapIntervalMs = Math.Clamp(config.HotkeyDoubleTapIntervalMs, 120, 550);
@@ -174,6 +175,80 @@ public sealed class ConfigService
             provider => provider.Id.Equals(config.SelectedProviderId, StringComparison.OrdinalIgnoreCase));
         config.SelectedProviderId = selected?.Id ?? config.Providers[0].Id;
         return config;
+    }
+
+    // 把「深度思考」并进「回答」：思考改成面板上的 OFF/ON 开关，不再是一个功能项。
+    // 只做一次；做过之后用户自己再加的模式都不再被改动。
+    private static List<FunctionOption> MergeThinkingIntoAnswer(
+        AppConfig config,
+        List<FunctionOption> functions)
+    {
+        if (config.ThinkingMergedIntoAnswer)
+        {
+            return functions;
+        }
+
+        config.ThinkingMergedIntoAnswer = true;
+
+        var thinkItems = functions
+            .Where(function => function.Mode == WorkflowMode.Think)
+            .ToList();
+
+        if (thinkItems.Count == 0)
+        {
+            return functions;
+        }
+
+        var answer = functions.FirstOrDefault(function => function.Mode == WorkflowMode.Answer);
+
+        if (answer is null)
+        {
+            // 只有思考项：把它改造成「回答」，不丢配置。
+            var single = thinkItems[0];
+            single.Mode = WorkflowMode.Answer;
+            single.Name = "回答";
+
+            foreach (var extra in thinkItems.Skip(1))
+            {
+                functions.Remove(extra);
+            }
+
+            return functions;
+        }
+
+        // 深度思考的提示词若被改过、而「回答」还是默认值，就把用户那段话搬过来，
+        // 别让合并把用户写的东西吞掉。
+        var thinkPrompt = thinkItems[0].SystemPrompt?.Trim() ?? string.Empty;
+        var thinkIsCustom =
+            !string.IsNullOrWhiteSpace(thinkPrompt) &&
+            !thinkPrompt.Equals(
+                FunctionCatalog.GetDefaultSystemPrompt(WorkflowMode.Think),
+                StringComparison.Ordinal);
+
+        var answerPrompt = answer.SystemPrompt?.Trim() ?? string.Empty;
+        var answerIsDefault =
+            string.IsNullOrWhiteSpace(answerPrompt) ||
+            answerPrompt.Equals(
+                FunctionCatalog.GetDefaultSystemPrompt(WorkflowMode.Answer),
+                StringComparison.Ordinal);
+
+        if (thinkIsCustom && answerIsDefault)
+        {
+            answer.SystemPrompt = thinkPrompt;
+        }
+
+        // 内置的那一项统一叫「回答」；用户自己加的同模式功能不动名字。
+        if (answer.Id == "answer")
+        {
+            answer.Name = "回答";
+        }
+
+        foreach (var thinkItem in thinkItems)
+        {
+            functions.Remove(thinkItem);
+        }
+
+        return functions;
     }
 
     // 把默认的三个检索项（联网解释 / 新闻追踪 / 知乎搜索）并成一个「联网检索」，只做一次。

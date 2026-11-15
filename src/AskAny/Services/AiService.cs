@@ -28,6 +28,7 @@ public sealed class AiService
         SearchPacket? search,
         IReadOnlyList<ImageAttachment>? images = null,
         IReadOnlyList<ConversationTurn>? conversation = null,
+        bool thinkingEnabled = false,
         CancellationToken cancellationToken = default)
     {
         Validate(function, prompt, provider);
@@ -36,7 +37,8 @@ public sealed class AiService
         timeout.CancelAfter(RequestTimeout);
 
         using var request = BuildRequest(
-            function, prompt, provider, apiKey, search, images, conversation, stream: false);
+            function, prompt, provider, apiKey, search, images, conversation,
+            stream: false, thinkingEnabled);
 
         using var response = await _httpClient.SendAsync(request, timeout.Token);
         var payload = await response.Content.ReadAsStringAsync(timeout.Token);
@@ -64,6 +66,7 @@ public sealed class AiService
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<ConversationTurn>? conversation,
         Action<string, string> onDelta,
+        bool thinkingEnabled = false,
         CancellationToken cancellationToken = default)
     {
         Validate(function, prompt, provider);
@@ -72,7 +75,8 @@ public sealed class AiService
         headerTimeout.CancelAfter(StreamingHeaderTimeout);
 
         using var request = BuildRequest(
-            function, prompt, provider, apiKey, search, images, conversation, stream: true);
+            function, prompt, provider, apiKey, search, images, conversation,
+            stream: true, thinkingEnabled);
 
         using var response = await _httpClient.SendAsync(
             request,
@@ -157,6 +161,7 @@ public sealed class AiService
             null,
             null,
             null,
+            thinkingEnabled: false,
             cancellationToken);
     }
 
@@ -181,12 +186,13 @@ public sealed class AiService
         SearchPacket? search,
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<ConversationTurn>? conversation,
-        bool stream)
+        bool stream,
+        bool thinkingEnabled)
     {
         var systemPrompt = BuildSystemPrompt(function, search);
         var endpoint = BuildEndpoint(provider.BaseUri, provider.Protocol);
         var requestBody = BuildRequestBody(
-            function, prompt, provider, systemPrompt, images, conversation, stream);
+            function, prompt, provider, systemPrompt, images, conversation, stream, thinkingEnabled);
 
         var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
         if (!string.IsNullOrWhiteSpace(apiKey))
@@ -288,9 +294,11 @@ public sealed class AiService
         string systemPrompt,
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<ConversationTurn>? conversation,
-        bool stream)
+        bool stream,
+        bool thinkingEnabled)
     {
-        var isThinking = function.Mode == WorkflowMode.Think;
+        // 思考现在是独立开关。老配置里若还留着「深度思考」功能项，也按开启处理。
+        var isThinking = thinkingEnabled || function.Mode == WorkflowMode.Think;
 
         if (provider.Protocol == ApiProtocol.Responses)
         {
@@ -332,21 +340,16 @@ public sealed class AiService
 
             if (!isThinking)
             {
-                // 「始终思考」的模型拒绝 effort=none（智谱 glm-5.3-flashx 会返回 1210），
-                // 对它们干脆不发这个字段，让服务端按默认行为走。
-                if (CanDisableReasoning(provider))
+                body["reasoning"] = new Dictionary<string, object?>
                 {
-                    body["reasoning"] = new Dictionary<string, object?>
-                    {
-                        ["effort"] = "none"
-                    };
-                }
+                    ["effort"] = ResolveReasoningEffort(provider, thinking: false)
+                };
             }
             else if (provider.SupportsReasoningControl)
             {
                 body["reasoning"] = new Dictionary<string, object?>
                 {
-                    ["effort"] = NormalizeReasoningEffort(provider.ReasoningEffort)
+                    ["effort"] = ResolveReasoningEffort(provider, thinking: true)
                 };
             }
 
@@ -402,23 +405,33 @@ public sealed class AiService
         if (!isThinking)
         {
             chatBody["temperature"] = 0.6;
-            if (provider.SupportsReasoningControl && CanDisableReasoning(provider))
+            if (provider.SupportsReasoningControl)
             {
-                chatBody["reasoning_effort"] = "none";
+                chatBody["reasoning_effort"] = ResolveReasoningEffort(provider, thinking: false);
             }
         }
         else if (provider.SupportsReasoningControl)
         {
-            chatBody["reasoning_effort"] = NormalizeReasoningEffort(provider.ReasoningEffort);
+            chatBody["reasoning_effort"] = ResolveReasoningEffort(provider, thinking: true);
         }
 
         return chatBody;
     }
 
-    // 未知时按「可以关闭」处理，保持既有行为不变；只有能力表明确说不行才跳过。
-    private static bool CanDisableReasoning(ProviderConfig provider)
+    // 思考开关对应的推理强度：
+    //   ON  → 用设置里的强度（默认 high）
+    //   OFF → 能关就发 none；「始终思考」的模型拒绝 none（智谱 glm-5.3-flashx 会返回 1210），
+    //         退到它能接受的最小强度 low。
+    private static string ResolveReasoningEffort(ProviderConfig provider, bool thinking)
     {
-        return ModelCapabilities.Infer(provider.SelectedModel).CanDisableReasoning is not false;
+        if (thinking)
+        {
+            return NormalizeReasoningEffort(provider.ReasoningEffort);
+        }
+
+        return ModelCapabilities.Infer(provider.SelectedModel).CanDisableReasoning == false
+            ? "low"
+            : "none";
     }
 
     private static object BuildResponsesContent(

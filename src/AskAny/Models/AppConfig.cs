@@ -178,6 +178,12 @@ public sealed class AppConfig
 
     // 「回答」与「解释」合并成一项，同样只做一次。
     public bool AnswerExplainMerged { get; set; }
+
+    // 「深度思考」并进「回答」：思考变成面板上的 OFF/ON 开关，同样只迁移一次。
+    public bool ThinkingMergedIntoAnswer { get; set; }
+
+    // 思考开关（OFF/ON）。与功能项解耦：同一个问题偶尔想深思，不该提前选一条命令。
+    public bool ThinkingEnabled { get; set; }
     public bool KeepWindowOnTop { get; set; } = true;
     public bool HideWhenDeactivated { get; set; } = true;
     public bool AutoFillSelectedText { get; set; } = true;
@@ -212,6 +218,8 @@ public sealed class AppConfig
             ZhihuAccessSecretProtected = ZhihuAccessSecretProtected,
             FunctionSetConsolidated = FunctionSetConsolidated,
             AnswerExplainMerged = AnswerExplainMerged,
+            ThinkingMergedIntoAnswer = ThinkingMergedIntoAnswer,
+            ThinkingEnabled = ThinkingEnabled,
             KeepWindowOnTop = KeepWindowOnTop,
             HideWhenDeactivated = HideWhenDeactivated,
             AutoFillSelectedText = AutoFillSelectedText,

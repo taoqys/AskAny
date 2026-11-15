@@ -8,15 +8,24 @@ namespace AskAny.Tests;
 
 public class FunctionCatalogTests
 {
+    // 「回答」「解释」「深度思考」三项最终合成两项：思考改成了面板上的独立开关。
     [Fact]
-    public void DefaultsAreThreeItems()
+    public void DefaultsAreTwoItems()
     {
         var functions = FunctionCatalog.CreateDefaultFunctions();
 
-        Assert.Equal(3, functions.Count);
+        Assert.Equal(2, functions.Count);
         Assert.Equal(
-            new[] { WorkflowMode.Answer, WorkflowMode.Think, WorkflowMode.SearchNetwork },
+            new[] { WorkflowMode.Answer, WorkflowMode.SearchNetwork },
             functions.Select(function => function.Mode).ToArray());
+    }
+
+    [Fact]
+    public void DefaultsContainNoDedicatedThinkingItem()
+    {
+        var functions = FunctionCatalog.CreateDefaultFunctions();
+
+        Assert.DoesNotContain(functions, function => function.Mode == WorkflowMode.Think);
     }
 
     [Fact]

@@ -8,8 +8,10 @@ using Xunit;
 
 namespace AskAny.Tests;
 
-// 有些模型「始终思考」，拒绝 effort=none（智谱 glm-5.3-flashx 会返回 1210）。
-// 这类模型不能发这个字段，否则整个请求 400 —— 能力表里用 d=false 标出。
+// 思考是独立开关（OFF/ON），不再是一个功能项：
+//   ON  → 按设置里的强度请求
+//   OFF → 能关的模型发 none；「始终思考」的模型（如智谱 glm-5.3-flashx，
+//         它拒绝 none 并返回 1210）退到它能接受的最小强度 low。
 public class ReasoningEffortTests
 {
     private const string ChatPayload =
@@ -35,7 +37,11 @@ public class ReasoningEffortTests
         return provider;
     }
 
-    private static async Task<string> SendAsync(ProviderConfig provider, WorkflowMode mode, string payload)
+    private static async Task<string> SendAsync(
+        ProviderConfig provider,
+        bool thinkingEnabled,
+        string payload,
+        WorkflowMode mode = WorkflowMode.Answer)
     {
         var handler = new StubHttpMessageHandler(HttpStatusCode.OK, payload);
         var service = new AiService(new HttpClient(handler));
@@ -45,7 +51,10 @@ public class ReasoningEffortTests
             "问题",
             provider,
             "key",
-            null);
+            null,
+            null,
+            null,
+            thinkingEnabled);
 
         return handler.LastRequestBody!;
     }
@@ -58,54 +67,86 @@ public class ReasoningEffortTests
         Assert.True(ModelCapabilities.Infer("deepseek-flash").CanDisableReasoning);
     }
 
+    // 关不掉思考的模型：不再省略字段，而是发它能接受的最小强度 low。
     [Fact]
-    public async Task AlwaysThinkingModelOmitsReasoningEffortInChatCompletions()
+    public async Task AlwaysThinkingModelGetsLowEffortInChatCompletions()
     {
         var body = await SendAsync(
-            ChatProvider("glm-5.3-flashx"), WorkflowMode.Answer, ChatPayload);
+            ChatProvider("glm-5.3-flashx"), thinkingEnabled: false, ChatPayload);
 
-        Assert.DoesNotContain("reasoning_effort", body);
+        Assert.Contains("reasoning_effort", body);
+        Assert.Contains("low", body);
+        Assert.DoesNotContain("none", body);
     }
 
     [Fact]
-    public async Task AlwaysThinkingModelOmitsReasoningInResponses()
+    public async Task AlwaysThinkingModelGetsLowEffortInResponses()
     {
         var body = await SendAsync(
-            ResponsesProvider("glm-5.3-flashx"), WorkflowMode.Answer, ResponsesPayload);
+            ResponsesProvider("glm-5.3-flashx"), thinkingEnabled: false, ResponsesPayload);
 
-        Assert.DoesNotContain("\"reasoning\"", body);
+        Assert.Contains("\"reasoning\"", body);
+        Assert.Contains("low", body);
+        Assert.DoesNotContain("none", body);
     }
 
     [Fact]
-    public async Task DisableableModelStillAsksReasoningOff()
+    public async Task DisableableModelAsksReasoningOff()
     {
         var body = await SendAsync(
-            ChatProvider("deepseek-flash"), WorkflowMode.Answer, ChatPayload);
+            ChatProvider("deepseek-flash"), thinkingEnabled: false, ChatPayload);
 
         Assert.Contains("reasoning_effort", body);
         Assert.Contains("none", body);
     }
 
-    // 未知模型（快照里没有）保持原行为：照旧发 none，避免改动既有可用配置。
+    // 未知模型（快照里没有）按「能关」处理：照旧发 none，不改既有可用配置。
     [Fact]
-    public async Task UnknownModelKeepsSendingReasoningOff()
+    public async Task UnknownModelSendsReasoningOff()
     {
         var body = await SendAsync(
-            ChatProvider("totally-unknown-model-9000"), WorkflowMode.Answer, ChatPayload);
+            ChatProvider("totally-unknown-model-9000"), thinkingEnabled: false, ChatPayload);
 
         Assert.Contains("reasoning_effort", body);
+        Assert.Contains("none", body);
     }
 
-    // 深度思考模式下，能控制推理的模型仍然要收到配置的强度。
+    // 打开思考后，即使模型原本关不掉思考，也走配置的强度。
     [Fact]
-    public async Task ThinkingModeSendsConfiguredEffort()
+    public async Task ThinkingOnSendsConfiguredEffort()
     {
         var provider = ChatProvider("deepseek-flash");
         provider.ReasoningEffort = "medium";
 
-        var body = await SendAsync(provider, WorkflowMode.Think, ChatPayload);
+        var body = await SendAsync(provider, thinkingEnabled: true, ChatPayload);
 
         Assert.Contains("reasoning_effort", body);
         Assert.Contains("medium", body);
+    }
+
+    [Fact]
+    public async Task ThinkingOnUsesConfiguredEffortForAlwaysThinkingModel()
+    {
+        var provider = ChatProvider("glm-5.3-flashx");
+        provider.ReasoningEffort = "high";
+
+        var body = await SendAsync(provider, thinkingEnabled: true, ChatPayload);
+
+        Assert.Contains("reasoning_effort", body);
+        Assert.Contains("high", body);
+    }
+
+    // 老配置里若还留着「深度思考」功能项，即使开关是 OFF 也按开启处理（向后兼容）。
+    [Fact]
+    public async Task LegacyThinkFunctionStillThinks()
+    {
+        var provider = ChatProvider("deepseek-flash");
+        provider.ReasoningEffort = "high";
+
+        var body = await SendAsync(
+            provider, thinkingEnabled: false, ChatPayload, WorkflowMode.Think);
+
+        Assert.Contains("reasoning_effort", body);
+        Assert.Contains("high", body);
     }
 }

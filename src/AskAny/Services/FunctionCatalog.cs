@@ -4,8 +4,11 @@ namespace AskAny.Services;
 
 public static class FunctionCatalog
 {
-    // 精简后的默认功能集：2 个「不检索」的意图 + 1 个「联网检索」（来源在面板上切换）。
-    // 「回答」与「解释」原本只差一段系统提示词、没有任何行为差异，已合并为一项。
+    // 精简后的默认功能集：「回答」+「联网检索」两项。
+    // · 「回答」与「解释」原本只差一段系统提示词、没有行为差异，已合并为一项。
+    // · 「深度思考」也已并入「回答」：思考与否改成面板上的独立开关（OFF/ON），
+    //   不再是一个功能项 —— 同一个问题该不该深思，是每次提问的临时选择，
+    //   而不是要用户提前选好的一条命令。
     public static List<FunctionOption> CreateDefaultFunctions()
     {
         return
@@ -14,18 +17,9 @@ public static class FunctionCatalog
                 "answer",
                 WorkflowMode.Answer,
                 "回答",
-                "直接回答或解释当前问题",
+                "直接回答或解释当前问题，可切换思考开关",
                 "\uE8BD",
                 GetDefaultSystemPrompt(WorkflowMode.Answer),
-                0,
-                -3.5),
-            Create(
-                "think",
-                WorkflowMode.Think,
-                "深度思考",
-                "仅此模式请求模型的扩展推理",
-                "\uE735",
-                "你是严谨的中文分析助手。给出必要的分析要点，再明确写出最终结论。不要虚构不确定信息。",
                 0,
                 -3.5),
             CreateNetwork()

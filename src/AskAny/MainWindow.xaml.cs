@@ -52,6 +52,12 @@ public partial class MainWindow : Window
     private bool _applyingCompareMode;
     private readonly System.Diagnostics.Stopwatch _compareStopwatch = new();
 
+    // 思考开关：与功能项解耦，跨功能共享，状态存配置。
+    private bool _thinkingEnabled;
+
+    // 程序化改动下拉框选中项时，抑制 SelectionChanged 里的保存逻辑。
+    private bool _suppressModelSelection;
+
     private sealed class StreamTarget
     {
         public StringBuilder Content { get; } = new();
@@ -145,6 +151,10 @@ public partial class MainWindow : Window
         {
             app.ApplyHotkeyConfig(_config);
         }
+
+        _thinkingEnabled = _config.ThinkingEnabled;
+        RefreshThinkingChips();
+        UpdateShortcutHint();
     }
 
     public void ShowFromHotkey(string? selectedText = null)
@@ -268,12 +278,31 @@ public partial class MainWindow : Window
             return;
         }
 
-        // PgUp / PgDn 循环切换来源：不用记数字映射，两个大键盲按也能命中。
-        // 仅在来源条可见（选中检索类功能）时接管，否则交还给列表滚动。
-        if ((e.Key is Key.PageUp or Key.PageDown) &&
-            SourceStrip.Visibility == Visibility.Visible)
+        // 键盘切换模型：Tab 切左边的（主）模型，` 切右边的（对比）模型。
+        // Tab 在输入框里本来只用于移动焦点，这里占用它换取「不用鼠标就能换模型」；
+        // 只在没有修饰键时接管，Ctrl+Tab 之类仍然交还给系统。
+        if (Keyboard.Modifiers == ModifierKeys.None && e.Key is Key.Tab or Key.OemTilde or Key.Oem3)
         {
-            CycleSearchBackend(e.Key == Key.PageDown ? 1 : -1);
+            CycleModelChoice(rightSide: e.Key is Key.OemTilde or Key.Oem3);
+            e.Handled = true;
+            return;
+        }
+
+        // PgUp / PgDn 切换当前功能对应的那组模式：
+        //   「联网检索」→ 切换检索来源（这是它的主要模式轴）
+        //   其它功能   → 切换思考 OFF/ON
+        // 这样两组都用同一个键位，不会因为功能不同而要记两套键。
+        if (e.Key is Key.PageUp or Key.PageDown)
+        {
+            if (SourceStrip.Visibility == Visibility.Visible)
+            {
+                CycleSearchBackend(e.Key == Key.PageDown ? 1 : -1);
+            }
+            else
+            {
+                CycleThinking();
+            }
+
             e.Handled = true;
             return;
         }
@@ -712,7 +741,7 @@ public partial class MainWindow : Window
                 : await ExecuteWithStreamingAsync(option, prompt, provider, search, images);
 
             var displayAnswer = AppendSources(result.Answer, search);
-            var reasoning = option.Mode == WorkflowMode.Think ? result.Reasoning : null;
+            var reasoning = string.IsNullOrWhiteSpace(result.Reasoning) ? null : result.Reasoning;
             _lastAnswer = displayAnswer;
             SetOutputMarkdown(displayAnswer, reasoning);
             // 不把图片放进会话：历史轮次不再重发图片（见 AiService 的说明），
@@ -804,16 +833,73 @@ public partial class MainWindow : Window
     // 只有选中检索类功能时才显示来源切换条；其余功能没有可切换的来源。
     private void RefreshSourceStrip()
     {
-        if (FunctionList.SelectedItem is not FunctionOption option || !IsSearchFunction(option))
+        var isSearch = FunctionList.SelectedItem is FunctionOption option && IsSearchFunction(option);
+
+        SourceStrip.Visibility = isSearch ? Visibility.Visible : Visibility.Collapsed;
+
+        if (isSearch)
         {
-            SourceStrip.Visibility = Visibility.Collapsed;
+            var option = (FunctionOption)FunctionList.SelectedItem;
+            ApplySourceChip(SourceGeneralChip, option.SearchBackend == SearchBackend.TavilyGeneral);
+            ApplySourceChip(SourceNewsChip, option.SearchBackend == SearchBackend.TavilyNews);
+            ApplySourceChip(SourceZhihuChip, option.SearchBackend == SearchBackend.Zhihu);
+        }
+
+        RefreshThinkingChips();
+    }
+
+    // 思考开关：OFF/ON 两个 chip，状态存在配置里，跨功能共享。
+    private void RefreshThinkingChips()
+    {
+        ApplySourceChip(ThinkingOffChip, !_thinkingEnabled);
+        ApplySourceChip(ThinkingOnChip, _thinkingEnabled);
+
+        var capability = ModelCapabilities.Infer(_currentProvider?.SelectedModel ?? string.Empty);
+        var forcedLow = !_thinkingEnabled && capability.CanDisableReasoning == false;
+
+        ThinkingOffChip.ToolTip = forcedLow
+            ? "关闭思考：当前模型始终思考，会自动退到最小强度 low"
+            : "关闭思考：发送 effort=none，跳过推理（PgUp/PgDn）";
+
+        // PgUp/PgDn 切哪一个，取决于当前功能暴露了哪一组模式。
+        var isSearch = FunctionList.SelectedItem is FunctionOption option && IsSearchFunction(option);
+        ModeHintText.Text = isSearch
+            ? "PgUp/PgDn 切来源 · Alt+1/2/3 直达"
+            : "PgUp/PgDn 切思考";
+
+        // 打开思考但模型不支持推理时，提前说清楚。
+        if (_thinkingEnabled && !capability.SupportsReasoning &&
+            !string.IsNullOrWhiteSpace(_currentProvider?.SelectedModel))
+        {
+            ModeHintText.Text = "当前模型可能不支持推理（仍会按 ON 发送强度）";
+        }
+    }
+
+    private void ThinkingChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string tag } && bool.TryParse(tag, out var enabled))
+        {
+            SetThinkingEnabled(enabled);
+        }
+    }
+
+    private void SetThinkingEnabled(bool enabled)
+    {
+        if (_thinkingEnabled == enabled)
+        {
             return;
         }
 
-        SourceStrip.Visibility = Visibility.Visible;
-        ApplySourceChip(SourceGeneralChip, option.SearchBackend == SearchBackend.TavilyGeneral);
-        ApplySourceChip(SourceNewsChip, option.SearchBackend == SearchBackend.TavilyNews);
-        ApplySourceChip(SourceZhihuChip, option.SearchBackend == SearchBackend.Zhihu);
+        _thinkingEnabled = enabled;
+        _config.ThinkingEnabled = enabled;
+        RefreshThinkingChips();
+        SaveConfigInBackground();
+        StatusText.Text = enabled ? "思考已开启" : "思考已关闭";
+    }
+
+    private void CycleThinking()
+    {
+        SetThinkingEnabled(!_thinkingEnabled);
     }
 
     private void ApplySourceChip(Button chip, bool isActive)
@@ -1048,6 +1134,7 @@ public partial class MainWindow : Window
                 images,
                 conversation,
                 (content, reasoning) => AppendDelta(target, content, reasoning),
+                _thinkingEnabled,
                 cancellationToken));
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -1058,7 +1145,8 @@ public partial class MainWindow : Window
             ResetStream(target);
 
             return await _aiService.ExecuteAsync(
-                option, prompt, provider, apiKey, search, images, conversation, cancellationToken);
+                option, prompt, provider, apiKey, search, images, conversation,
+                _thinkingEnabled, cancellationToken);
         }
     }
 
@@ -1589,20 +1677,19 @@ public partial class MainWindow : Window
         {
             StatusText.Text = $"已选择：{option.Name}，Enter 执行";
 
-            // 能力表能告诉我们「当前模型是否支持推理」。选到「深度思考」但模型不支持时
-            // 提前说清楚，免得用户以为它真在深思。
+            // 思考现在是独立开关：只提示「开关与当前模型能力不匹配」的情况。
             if (_currentProvider is { } provider && !string.IsNullOrWhiteSpace(provider.SelectedModel))
             {
                 var capability = ModelCapabilities.Infer(provider.SelectedModel);
 
-                if (option.Mode == WorkflowMode.Think && !capability.SupportsReasoning)
+                if (_thinkingEnabled && !capability.SupportsReasoning)
                 {
                     StatusText.Text = $"已选择：{option.Name}（当前模型可能不支持推理）";
                 }
-                else if (option.Mode == WorkflowMode.Answer && capability.CanDisableReasoning == false)
+                else if (!_thinkingEnabled && capability.CanDisableReasoning == false)
                 {
-                    // 这类模型关不掉思考：普通回答也会先思考，耗时会长一些。
-                    StatusText.Text = $"已选择：{option.Name}（该模型始终思考，可能较慢）";
+                    // 这类模型关不掉思考：会退到最小强度 low，耗时仍会长一些。
+                    StatusText.Text = $"已选择：{option.Name}（该模型始终思考，将按最低强度发送）";
                 }
             }
         }
@@ -1610,58 +1697,96 @@ public partial class MainWindow : Window
         RefreshSourceStrip();
     }
 
-    // 点击模型 tab 切换。视觉上的「选中」由重建 tab 列表实现（模型数量很少，重建很便宜）。
-    private void ModelTab_Click(object sender, MouseButtonEventArgs e)
+    // 模型选择框：单栏时只有左边一个；对比模式下并排两个（左 = 主模型，右 = 对比模型）。
+    private void LeftModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (sender is FrameworkElement { Tag: ModelTabItem item })
+        if (_suppressModelSelection || LeftModelComboBox.SelectedItem is not ModelChoice choice)
         {
-            ApplyModelChoice(item.Choice);
-            e.Handled = true;
+            return;
         }
+
+        ApplyModelChoice(choice);
+    }
+
+    private void RightModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressModelSelection || RightModelComboBox.SelectedItem is not ModelChoice choice)
+        {
+            return;
+        }
+
+        _compareChoice = choice;
+        _config.CompareProviderId = choice.Provider.Id;
+        _config.CompareModel = choice.Model;
+        RightModelComboBox.ToolTip = BuildModelToolTip(choice);
+        SaveConfigInBackground();
     }
 
     private void RefreshModelChoices()
     {
-        // 只列「已启用」的模型：设置里没勾选的模型不出现在主界面。
-        _modelChoices = _config.Providers
-            .SelectMany(provider => provider.EffectiveModels()
-                .Select(model => new ModelChoice(provider, model)))
-            .ToList();
+        _suppressModelSelection = true;
+        try
+        {
+            // 只列「已启用」的模型：设置里没勾选的模型不出现在主界面。
+            _modelChoices = _config.Providers
+                .SelectMany(provider => provider.EffectiveModels()
+                    .Select(model => new ModelChoice(provider, model)))
+                .ToList();
 
-        var preferred = _modelChoices.FirstOrDefault(choice =>
-                            choice.Provider.Id == _config.SelectedProviderId &&
-                            choice.Model.Equals(
-                                choice.Provider.SelectedModel,
-                                StringComparison.OrdinalIgnoreCase))
-                        ?? _modelChoices.FirstOrDefault();
+            var preferred = _modelChoices.FirstOrDefault(choice =>
+                                choice.Provider.Id == _config.SelectedProviderId &&
+                                choice.Model.Equals(
+                                    choice.Provider.SelectedModel,
+                                    StringComparison.OrdinalIgnoreCase))
+                            ?? _modelChoices.FirstOrDefault();
 
-        _currentProvider = preferred?.Provider ?? _config.Providers.FirstOrDefault();
+            _currentProvider = preferred?.Provider ?? _config.Providers.FirstOrDefault();
 
-        // 同一模型名出现在多个提供商下时，tab 上补提供商名，否则只显示模型名。
-        var duplicatedModels = _modelChoices
-            .GroupBy(choice => choice.Model, StringComparer.OrdinalIgnoreCase)
-            .Where(group => group.Select(choice => choice.Provider.Id).Distinct().Count() > 1)
-            .Select(group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            LeftModelComboBox.ItemsSource = null;
+            LeftModelComboBox.ItemsSource = _modelChoices;
+            LeftModelComboBox.SelectedItem = preferred;
+            LeftModelComboBox.ToolTip = preferred is null
+                ? "请先在设置里配置模型"
+                : BuildModelToolTip(preferred);
 
-        var tabs = _modelChoices
-            .Select(choice => new ModelTabItem(
-                choice,
-                IsSameChoice(choice, preferred),
-                duplicatedModels.Contains(choice.Model)
-                    ? $"{choice.Provider.Name} · {choice.Model}"
-                    : choice.Model,
-                BuildModelTabToolTip(choice)))
-            .ToList();
+            RefreshCompareOptions();
+            UpdateAttachmentTargetText();
+        }
+        finally
+        {
+            _suppressModelSelection = false;
+        }
 
-        ModelTabStrip.ItemsSource = null;
-        ModelTabStrip.ItemsSource = tabs;
-        ModelTabScroll.Visibility = tabs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-
-        UpdateAttachmentTargetText();
-
-        // 模型集合变了（切换 tab、或从设置回来）：对比栏的有效性与标签都要跟着刷新。
+        // 配置里的对比模式要在启动/设置回来后恢复。
         ApplyCompareMode(_config.CompareMode, save: false);
+    }
+
+    // 右栏候选 = 已启用且不等于左栏当前模型。
+    private void RefreshCompareOptions()
+    {
+        var wasSuppressed = _suppressModelSelection;
+        _suppressModelSelection = true;
+        try
+        {
+            var candidates = CompareCandidates();
+
+            RightModelComboBox.ItemsSource = null;
+            RightModelComboBox.ItemsSource = candidates;
+
+            var stored = candidates.FirstOrDefault(choice =>
+                choice.Provider.Id == _config.CompareProviderId &&
+                choice.Model.Equals(_config.CompareModel, StringComparison.OrdinalIgnoreCase));
+
+            _compareChoice = stored ?? candidates.FirstOrDefault();
+            RightModelComboBox.SelectedItem = _compareChoice;
+            RightModelComboBox.ToolTip = _compareChoice is null
+                ? "需要在设置里启用第二个模型"
+                : BuildModelToolTip(_compareChoice);
+        }
+        finally
+        {
+            _suppressModelSelection = wasSuppressed;
+        }
     }
 
     private static bool IsSameChoice(ModelChoice left, ModelChoice? right)
@@ -1671,8 +1796,8 @@ public partial class MainWindow : Window
                left.Model.Equals(right.Model, StringComparison.OrdinalIgnoreCase);
     }
 
-    // tab 悬停提示：提供商 / 模型 + 能力标签（图片、推理、是否始终思考、上下文长度）。
-    private static string BuildModelTabToolTip(ModelChoice choice)
+    // 悬停提示：提供商 / 模型 + 能力标签（图片、推理、是否始终思考、上下文长度）。
+    private static string BuildModelToolTip(ModelChoice choice)
     {
         var capability = ModelCapabilities.Infer(choice.Model);
         var parts = new List<string> { $"{choice.Provider.Name} / {choice.Model}" };
@@ -1695,90 +1820,60 @@ public partial class MainWindow : Window
         return string.Join(" · ", parts);
     }
 
-    private sealed class ModelTabItem
+    // Tab 切左边（主）模型；` 切右边（对比）模型。都在已启用模型里循环。
+    private void CycleModelChoice(bool rightSide)
     {
-        public ModelTabItem(ModelChoice choice, bool isActive, string label, string toolTip)
+        if (rightSide)
         {
-            Choice = choice;
-            IsActive = isActive;
-            Label = label;
-            ToolTip = toolTip;
+            if (!_compareMode)
+            {
+                return;
+            }
+
+            var candidates = CompareCandidates();
+            if (candidates.Count == 0)
+            {
+                return;
+            }
+
+            var index = candidates.FindIndex(choice => IsSameChoice(choice, _compareChoice));
+            var next = candidates[(index + 1) % candidates.Count];
+            _compareChoice = next;
+            _config.CompareProviderId = next.Provider.Id;
+            _config.CompareModel = next.Model;
+
+            _suppressModelSelection = true;
+            try
+            {
+                RightModelComboBox.SelectedItem = next;
+                RightModelComboBox.ToolTip = BuildModelToolTip(next);
+            }
+            finally
+            {
+                _suppressModelSelection = false;
+            }
+
+            return;
         }
 
-        public ModelChoice Choice { get; }
+        if (_modelChoices.Count == 0)
+        {
+            return;
+        }
 
-        public string Label { get; }
+        var primary = CurrentPrimaryChoice();
+        var primaryIndex = primary is null
+            ? -1
+            : _modelChoices.FindIndex(choice => IsSameChoice(choice, primary));
+        var nextPrimary = _modelChoices[(primaryIndex + 1) % _modelChoices.Count];
 
-        public string ToolTip { get; }
-
-        public bool IsActive { get; }
+        ApplyModelChoice(nextPrimary);
     }
-
-    // 仅供 CI 截图：把面板切到「对比模式」并填两段示例回答。
-    // 纯本地渲染、不发任何请求，用来核对左右分栏的布局。
-    public void ShowComparePreview()
-    {
-        ApplyCompareMode(true, save: false);
-
-        ResponsePanel.Visibility = Visibility.Visible;
-        FunctionList.Visibility = Visibility.Collapsed;
-        ResponseModeText.Text = "回答 · 双模型对比";
-        ResponseMetaText.Text = "1.8 秒 · Enter 追问 · ← 返回";
-
-        PrimaryModelText.Text = "OpenAI · gpt-4.1-mini";
-        PrimaryMetaText.Text = "完成 · 1.8 秒";
-        CompareModelText.Text = "DeepSeek · deepseek-flash";
-        CompareMetaText.Text = "完成 · 2.1 秒";
-
-        SetOutputMarkdown(
-            """
-            ## 要点
-
-            左栏示例：**先给结论，再补一句理由**。
-
-            - 对比模式下两栏各自流式渲染
-            - 检索只做一次，两边看到同样的资料
-
-            行内公式 $E = mc^2$ 也能正常渲染。
-            """,
-            null);
-
-        SetCompareMarkdown(
-            """
-            ## 要点
-
-            右栏示例：同一个问题，另一个模型的表述。
-
-            - 用语更直白一些
-            - 结论顺序略有不同
-
-            行内公式 $E = mc^2$ 同样正常。
-            """,
-            null);
-    }
-
     // ── 双模型对比 ────────────────────────────────────────────────
 
     private void CompareModeButton_Toggled(object sender, RoutedEventArgs e)
     {
         ApplyCompareMode(CompareModeButton.IsChecked == true, save: true);
-    }
-
-    private void CycleCompareModelButton_Click(object sender, RoutedEventArgs e)
-    {
-        var candidates = CompareCandidates();
-        if (candidates.Count == 0)
-        {
-            return;
-        }
-
-        var index = candidates.FindIndex(choice => IsSameChoice(choice, _compareChoice));
-        _compareChoice = candidates[(index + 1) % candidates.Count];
-
-        _config.CompareProviderId = _compareChoice.Provider.Id;
-        _config.CompareModel = _compareChoice.Model;
-        RefreshCompareLabels();
-        SaveConfigInBackground();
     }
 
     private void ApplyCompareMode(bool enabled, bool save)
@@ -1795,30 +1890,47 @@ public partial class MainWindow : Window
             var available = CompareCandidates().Count > 0;
             _compareMode = enabled && available;
 
-            if (enabled && !available)
-            {
-                StatusText.Text = "需要在设置里启用至少两个模型才能对比";
-            }
-
             CompareModeButton.IsChecked = _compareMode;
+
+            // 分栏
             ComparePane.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
             CompareSplitterColumn.Width = _compareMode ? new GridLength(10) : new GridLength(0);
             CompareColumn.Width = _compareMode
                 ? new GridLength(1, GridUnitType.Star)
                 : new GridLength(0);
+
             PrimaryModelText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
             PrimaryMetaText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
 
             // 对比模式下两栏各自显示耗时，共享的那行元信息就藏起来，避免和两栏打架。
             ResponseMetaText.Visibility = _compareMode ? Visibility.Collapsed : Visibility.Visible;
 
+            // 模型选择框：单栏一个，对比模式两个。
+            _suppressModelSelection = true;
+            try
+            {
+                RightModelComboBox.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
+                CompareArrowText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
+                LeftModelLabel.Text = _compareMode ? "左" : "模型";
+            }
+            finally
+            {
+                _suppressModelSelection = false;
+            }
+
             if (_compareMode)
             {
-                RefreshCompareLabels();
+                RefreshCompareOptions();
                 PrimaryModelText.Text = _currentProvider is null
                     ? string.Empty
                     : $"{_currentProvider.Name} · {_currentProvider.SelectedModel}";
             }
+            else if (enabled && !available)
+            {
+                StatusText.Text = "需要在设置里启用至少两个模型才能对比";
+            }
+
+            UpdateShortcutHint();
 
             if (save)
             {
@@ -1844,30 +1956,17 @@ public partial class MainWindow : Window
         return _modelChoices.FirstOrDefault(choice =>
                    _currentProvider is not null &&
                    choice.Provider.Id == _currentProvider.Id &&
-                   choice.Model.Equals(_currentProvider.SelectedModel, StringComparison.OrdinalIgnoreCase))
+                   choice.Model.Equals(choice.Provider.SelectedModel, StringComparison.OrdinalIgnoreCase))
+               ?? LeftModelComboBox.SelectedItem as ModelChoice
                ?? _modelChoices.FirstOrDefault();
     }
 
-    private void RefreshCompareLabels()
+    // 底栏提示随模式变化：单栏时 Tab 切模型，对比时 Tab 切左、` 切右。
+    private void UpdateShortcutHint()
     {
-        var candidates = CompareCandidates();
-        if (candidates.Count == 0)
-        {
-            _compareChoice = null;
-            CompareModelText.Text = "需要在设置里启用第二个模型";
-            CompareModelText.ToolTip = null;
-            CycleCompareModelButton.IsEnabled = false;
-            return;
-        }
-
-        var stored = candidates.FirstOrDefault(choice =>
-            choice.Provider.Id == _config.CompareProviderId &&
-            choice.Model.Equals(_config.CompareModel, StringComparison.OrdinalIgnoreCase));
-
-        _compareChoice = stored ?? candidates[0];
-        CompareModelText.Text = $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
-        CompareModelText.ToolTip = BuildModelTabToolTip(_compareChoice);
-        CycleCompareModelButton.IsEnabled = candidates.Count > 1;
+        ShortcutHintText.Text = _compareMode
+            ? "ESC 关闭 · Tab 切左 · ` 切右"
+            : "ESC 关闭 · Tab 切模型";
     }
 
     private void ApplyModelChoice(ModelChoice choice)
@@ -1876,13 +1975,22 @@ public partial class MainWindow : Window
         choice.Provider.SelectedModel = choice.Model;
         _config.SelectedProviderId = choice.Provider.Id;
 
-        // 重建 tab 列表以更新「当前选中」高亮。
-        RefreshModelChoices();
+        _suppressModelSelection = true;
+        try
+        {
+            LeftModelComboBox.SelectedItem = choice;
+            LeftModelComboBox.ToolTip = BuildModelToolTip(choice);
+        }
+        finally
+        {
+            _suppressModelSelection = false;
+        }
 
+        // 主模型变了，右栏候选也要跟着排除它。
+        RefreshCompareOptions();
         UpdateAttachmentTargetText();
         SaveConfigInBackground();
     }
-
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         OpenSettings();

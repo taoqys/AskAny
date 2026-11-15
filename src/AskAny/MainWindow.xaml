@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny"
         Width="660"
-        Height="504"
+        Height="496"
         MinWidth="560"
-        MinHeight="452"
+        MinHeight="446"
         WindowStyle="None"
         ResizeMode="CanResizeWithGrip"
         AllowsTransparency="True"
@@ -40,89 +40,9 @@
                 <RowDefinition Height="48" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <!-- 模型 tab：只显示设置里勾选启用的模型，点一下即切换。
-                     只有一个模型时它同时充当「当前模型」提示，所以不做隐藏。 -->
-                <Grid Grid.Row="0" Margin="12,6,10,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <ScrollViewer x:Name="ModelTabScroll"
-                                  Grid.Column="0"
-                                  HorizontalScrollBarVisibility="Hidden"
-                                  VerticalScrollBarVisibility="Disabled">
-                    <ItemsControl x:Name="ModelTabStrip"
-                                  AutomationProperties.AutomationId="ModelTabs"
-                                  AutomationProperties.Name="模型切换">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border x:Name="Tab"
-                                        Margin="0,0,4,0"
-                                        Padding="9,3"
-                                        Background="Transparent"
-                                        CornerRadius="6"
-                                        Cursor="Hand"
-                                        Tag="{Binding}"
-                                        MouseLeftButtonUp="ModelTab_Click">
-                                    <Border.ToolTip>
-                                        <ToolTip Content="{Binding ToolTip}" />
-                                    </Border.ToolTip>
-                                    <TextBlock x:Name="TabLabel"
-                                               FontSize="11.5"
-                                               Foreground="{StaticResource MutedBrush}"
-                                               Text="{Binding Label}" />
-                                </Border>
-                                <DataTemplate.Triggers>
-                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                        <Setter TargetName="Tab" Property="Background" Value="{StaticResource AccentSoftBrush}" />
-                                        <Setter TargetName="TabLabel" Property="Foreground" Value="{StaticResource AccentBrush}" />
-                                        <Setter TargetName="TabLabel" Property="FontWeight" Value="SemiBold" />
-                                    </DataTrigger>
-                                    <Trigger SourceName="Tab" Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="TabLabel" Property="Foreground" Value="{StaticResource InkBrush}" />
-                                    </Trigger>
-                                </DataTemplate.Triggers>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    </ScrollViewer>
-                    <ToggleButton x:Name="CompareModeButton"
-                                  Grid.Column="1"
-                                  Margin="6,0,0,0"
-                                  Padding="8,2"
-                                  VerticalAlignment="Center"
-                                  Background="Transparent"
-                                  BorderBrush="{StaticResource LineBrush}"
-                                  BorderThickness="1"
-                                  Cursor="Hand"
-                                  FontSize="11"
-                                  Foreground="{StaticResource MutedBrush}"
-                                  ToolTip="双模型对比：同一个问题同时问两个模型，左右分屏（Ctrl+D）"
-                                  Checked="CompareModeButton_Toggled"
-                                  Unchecked="CompareModeButton_Toggled">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock FontFamily="Segoe MDL2 Assets"
-                                       FontSize="11"
-                                       Text="&#xE8AB;" />
-                            <TextBlock Margin="4,0,0,0" Text="对比" />
-                        </StackPanel>
-                    </ToggleButton>
-                </Grid>
-
-                <Grid Grid.Row="1"
-                      MinHeight="48"
-                      Margin="12,2,6,6"
+            <Grid Grid.Row="0"
+                  MinHeight="48"
+                  Margin="12,6,6,6"
                       MouseLeftButtonDown="Header_MouseLeftButtonDown"
                       AllowDrop="True"
                       DragOver="Input_DragOver"
@@ -275,7 +195,6 @@
                                Foreground="{StaticResource MutedBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                </Grid>
             </Grid>
 
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
@@ -524,29 +443,14 @@
                         <DockPanel x:Name="ComparePane"
                                    Grid.Column="2"
                                    Visibility="Collapsed">
-                            <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="CompareModelText"
-                                           VerticalAlignment="Center"
-                                           FontSize="11.5"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource AccentBrush}"
-                                           TextTrimming="CharacterEllipsis" />
-                                <Button x:Name="CycleCompareModelButton"
-                                        Grid.Column="1"
-                                        Width="26"
-                                        Height="22"
-                                        Style="{StaticResource IconButton}"
-                                        ToolTip="切换对比模型"
-                                        Click="CycleCompareModelButton_Click">
-                                    <TextBlock FontFamily="Segoe MDL2 Assets"
-                                               FontSize="12"
-                                               Text="&#xE8AB;" />
-                                </Button>
-                            </Grid>
+                            <!-- 右栏模型名由底栏的选择框决定，这里只显示当前值。 -->
+                            <TextBlock x:Name="CompareModelText"
+                                       DockPanel.Dock="Top"
+                                       Margin="0,0,0,4"
+                                       FontSize="11.5"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       TextTrimming="CharacterEllipsis" />
                             <TextBlock x:Name="CompareMetaText"
                                        DockPanel.Dock="Top"
                                        Margin="0,0,0,4"
@@ -584,48 +488,98 @@
                 </Grid>
             </Grid>
 
-            <!-- 来源切换条：只有选中检索类功能时才出现，「联网检索」用它覆盖原来的
-                 联网解释 / 新闻追踪 / 知乎搜索三个来源。独立占一行，避免功能多时盖住列表。 -->
-            <StackPanel x:Name="SourceStrip"
-                        Grid.Row="3"
+            <!-- 模式条：思考 OFF/ON 与检索来源都放这一行，PgUp/PgDn 切换当前功能对应的那一组。
+                 对比开关也放在这里，和「模式」类操作放在一起。 -->
+            <StackPanel Grid.Row="3"
                         Orientation="Horizontal"
                         HorizontalAlignment="Left"
                         VerticalAlignment="Center"
-                        Margin="14,0,14,8"
-                        Visibility="Collapsed">
+                        Margin="14,0,14,8">
                 <TextBlock VerticalAlignment="Center"
                            Margin="0,0,7,0"
                            FontSize="11"
                            Foreground="{StaticResource MutedBrush}"
-                           Text="来源" />
-                <Button x:Name="SourceGeneralChip"
+                           Text="思考" />
+                <Button x:Name="ThinkingOffChip"
                         Style="{StaticResource SourceChip}"
-                        Tag="TavilyGeneral"
-                        ToolTip="Tavily 全网搜索（Alt+1）"
-                        Content="全网"
-                        Click="SourceChip_Click" />
-                <Button x:Name="SourceNewsChip"
+                        Tag="false"
+                        ToolTip="关闭思考：能关的模型发 none，始终思考的模型退到 low（PgUp/PgDn）"
+                        Content="OFF"
+                        Click="ThinkingChip_Click" />
+                <Button x:Name="ThinkingOnChip"
                         Style="{StaticResource SourceChip}"
-                        Tag="TavilyNews"
-                        ToolTip="Tavily 新闻：偏向主流媒体的实时报道（Alt+2）"
-                        Content="新闻"
-                        Click="SourceChip_Click" />
-                <Button x:Name="SourceZhihuChip"
-                        Style="{StaticResource SourceChip}"
-                        Tag="Zhihu"
-                        ToolTip="知乎站内检索，需要 Access Secret（Alt+3）"
-                        Content="知乎"
-                        Click="SourceChip_Click" />
-                <TextBlock VerticalAlignment="Center"
-                           Margin="6,0,0,0"
+                        Tag="true"
+                        ToolTip="开启思考：按设置里的强度请求推理（PgUp/PgDn）"
+                        Content="ON"
+                        Click="ThinkingChip_Click" />
+
+                <Border Width="1"
+                        Height="14"
+                        Margin="10,0,10,0"
+                        VerticalAlignment="Center"
+                        Background="{StaticResource LineBrush}"
+                        Visibility="{Binding Visibility, ElementName=SourceStrip}" />
+
+                <StackPanel x:Name="SourceStrip"
+                            Orientation="Horizontal"
+                            Visibility="Collapsed">
+                    <TextBlock VerticalAlignment="Center"
+                               Margin="0,0,7,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="来源" />
+                    <Button x:Name="SourceGeneralChip"
+                            Style="{StaticResource SourceChip}"
+                            Tag="TavilyGeneral"
+                            ToolTip="Tavily 全网搜索（Alt+1）"
+                            Content="全网"
+                            Click="SourceChip_Click" />
+                    <Button x:Name="SourceNewsChip"
+                            Style="{StaticResource SourceChip}"
+                            Tag="TavilyNews"
+                            ToolTip="Tavily 新闻：偏向主流媒体的实时报道（Alt+2）"
+                            Content="新闻"
+                            Click="SourceChip_Click" />
+                    <Button x:Name="SourceZhihuChip"
+                            Style="{StaticResource SourceChip}"
+                            Tag="Zhihu"
+                            ToolTip="知乎站内检索，需要 Access Secret（Alt+3）"
+                            Content="知乎"
+                            Click="SourceChip_Click" />
+                </StackPanel>
+
+                <ToggleButton x:Name="CompareModeButton"
+                              Margin="12,0,0,0"
+                              Padding="8,1"
+                              VerticalAlignment="Center"
+                              Background="Transparent"
+                              BorderBrush="{StaticResource LineBrush}"
+                              BorderThickness="1"
+                              Cursor="Hand"
+                              FontSize="11"
+                              Foreground="{StaticResource MutedBrush}"
+                              ToolTip="双模型对比：同一个问题同时问两个模型，左右分屏（Ctrl+D）"
+                              Checked="CompareModeButton_Toggled"
+                              Unchecked="CompareModeButton_Toggled">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   FontSize="11"
+                                   Text="&#xE8AB;" />
+                        <TextBlock Margin="4,0,0,0" Text="对比" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <TextBlock x:Name="ModeHintText"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0"
                            FontSize="11"
                            Foreground="{StaticResource MutedBrush}"
-                           Text="PgUp/PgDn 循环 · Alt+1/2/3 直达" />
+                           Text="PgUp/PgDn 切思考" />
             </StackPanel>
-
             <Grid Grid.Row="4" Margin="10,0,8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
@@ -644,11 +598,12 @@
                                    Foreground="{StaticResource MutedBrush}"
                                    Text="&#xE72B;" />
                     </Border>
-                    <TextBlock Margin="6,0,10,0"
+                    <TextBlock x:Name="ShortcutHintText"
+                               Margin="6,0,10,0"
                                VerticalAlignment="Center"
                                FontSize="11"
                                Foreground="{StaticResource MutedBrush}"
-                               Text="按 ESC 关闭" />
+                               Text="ESC 关闭 · Tab 切模型" />
                     <TextBlock x:Name="StatusText"
                                VerticalAlignment="Center"
                                FontSize="11"
@@ -656,7 +611,46 @@
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <Button Grid.Column="1"
+                <!-- 模型选择框：单栏时只有一个，对比模式下并排两个（左/右）。
+                     键盘：Tab 切左模型、` 切右模型。 -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock x:Name="LeftModelLabel"
+                               Margin="0,0,5,0"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="模型" />
+                    <ComboBox x:Name="LeftModelComboBox"
+                              AutomationProperties.AutomationId="LeftModelComboBox"
+                              AutomationProperties.Name="模型选择（左）"
+                              Width="140"
+                              Height="28"
+                              Style="{StaticResource ComboField}"
+                              DisplayMemberPath="DisplayName"
+                              IsTextSearchEnabled="False"
+                              SelectionChanged="LeftModelComboBox_SelectionChanged" />
+                    <TextBlock x:Name="CompareArrowText"
+                               Margin="6,0,6,0"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="⇄"
+                               Visibility="Collapsed" />
+                    <ComboBox x:Name="RightModelComboBox"
+                              AutomationProperties.AutomationId="RightModelComboBox"
+                              AutomationProperties.Name="对比模型选择（右）"
+                              Width="140"
+                              Height="28"
+                              Style="{StaticResource ComboField}"
+                              DisplayMemberPath="DisplayName"
+                              IsTextSearchEnabled="False"
+                              Visibility="Collapsed"
+                              SelectionChanged="RightModelComboBox_SelectionChanged" />
+                </StackPanel>
+
+                <Button Grid.Column="2"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="HistoryButton"
                         AutomationProperties.Name="历史记录"
@@ -667,7 +661,7 @@
                                Text="&#xE81C;" />
                 </Button>
 
-                <Button Grid.Column="2"
+                <Button Grid.Column="3"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="SettingsButton"
                         AutomationProperties.Name="设置"
@@ -677,7 +671,6 @@
                                FontSize="16"
                                Text="&#xE713;" />
                 </Button>
-            </Grid>
-        </Grid>
+            </Grid>        </Grid>
     </Border>
 </Window>

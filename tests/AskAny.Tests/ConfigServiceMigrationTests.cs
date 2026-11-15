@@ -18,10 +18,10 @@ public class ConfigServiceMigrationTests
         return FunctionCatalog.GetDefaultSystemPrompt(mode);
     }
 
-    // 六个默认项（三个检索项提示词都未改动）应收敛到三项：
-    // 检索三项并成「联网检索」，回答与解释并成一项。
+    // 六个默认项应收敛到两项：「检索三项」并成「联网检索」，
+    // 「解释」并进「回答」，「深度思考」也并进「回答」（思考变成面板上的独立开关）。
     [Fact]
-    public async Task DefaultSixItemConfigCollapsesToThree()
+    public async Task DefaultSixItemConfigCollapsesToTwo()
     {
         var json = ConfigFixture.BuildConfig(new object[]
         {
@@ -35,9 +35,9 @@ public class ConfigServiceMigrationTests
 
         var config = await ConfigFixture.NormalizeAsync(json);
 
-        Assert.Equal(3, config.Functions.Count);
+        Assert.Equal(2, config.Functions.Count);
         Assert.Equal(
-            new[] { "回答此问题", "联网检索", "深度思考" },
+            new[] { "回答此问题", "联网检索" },
             config.Functions.Select(function => function.Name).ToArray());
 
         var network = config.Functions[1];
@@ -46,6 +46,7 @@ public class ConfigServiceMigrationTests
 
         Assert.True(config.FunctionSetConsolidated);
         Assert.True(config.AnswerExplainMerged);
+        Assert.True(config.ThinkingMergedIntoAnswer);
     }
 
     // 三个检索项里恰好一项提示词被改过时，两项都不能丢：
@@ -156,14 +157,13 @@ public class ConfigServiceMigrationTests
     }
 
     [Fact]
-    public async Task EmptyFunctionsGetTheThreeDefaults()
+    public async Task EmptyFunctionsGetTheTwoDefaults()
     {
         var config = await ConfigFixture.NormalizeAsync(
             ConfigFixture.BuildConfig(Array.Empty<object>()));
 
-        Assert.Equal(3, config.Functions.Count);
+        Assert.Equal(2, config.Functions.Count);
         Assert.Contains(config.Functions, function => function.Mode == WorkflowMode.Answer);
-        Assert.Contains(config.Functions, function => function.Mode == WorkflowMode.Think);
         Assert.Contains(config.Functions, function => function.Mode == WorkflowMode.SearchNetwork);
     }
 
