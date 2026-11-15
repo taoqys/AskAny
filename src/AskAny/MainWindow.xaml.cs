@@ -280,9 +280,13 @@ public partial class MainWindow : Window
         // 键盘切换模型：Tab 切左边的（主）模型，` 切右边的（对比）模型。
         // Tab 在输入框里本来只用于移动焦点，这里占用它换取「不用鼠标就能换模型」；
         // 只在没有修饰键时接管，Ctrl+Tab 之类仍然交还给系统。
-        if (Keyboard.Modifiers == ModifierKeys.None && e.Key is Key.Tab or Key.OemTilde or Key.Oem3)
+        // Tab / ` 切换模型；按住 Shift 反向。四个键位覆盖「左/右 × 正向/反向」。
+        if (e.Key is Key.Tab or Key.OemTilde or Key.Oem3 &&
+            Keyboard.Modifiers is ModifierKeys.None or ModifierKeys.Shift)
         {
-            CycleModelChoice(rightSide: e.Key is Key.OemTilde or Key.Oem3);
+            CycleModelChoice(
+                rightSide: e.Key is Key.OemTilde or Key.Oem3,
+                backwards: Keyboard.Modifiers == ModifierKeys.Shift);
             e.Handled = true;
             return;
         }
@@ -693,6 +697,7 @@ public partial class MainWindow : Window
         _lastRequestCancelledByUser = false;
         BusyProgress.Visibility = Visibility.Visible;
         ResponsePanel.Visibility = Visibility.Visible;
+        UpdateModeStripVisibility();
         FunctionList.Visibility = Visibility.Collapsed;
         SetResponsePromptDisplay(prompt, images.Count);
         ResponseModeText.Text = _compareMode
@@ -1344,6 +1349,7 @@ public partial class MainWindow : Window
         ResetForNewRequest();
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        UpdateModeStripVisibility();
         FunctionList.SelectedIndex = 0;
 
         StatusText.Text = "已开始新话题";
@@ -1409,19 +1415,42 @@ public partial class MainWindow : Window
         OutputRichText.Document = MarkdownRenderer.Render(markdown);
         OutputRichText.ScrollToHome();
 
-        // 对比模式下左右两栏都是完整回答，跨栏的「思考过程」展开器只会让人搞不清
-        // 它属于哪个模型，索性不显示。
+        // 对比模式下左右两栏都是完整回答，跨栏的「思考过程」只会让人搞不清它属于哪个模型。
         if (string.IsNullOrWhiteSpace(reasoning) || _compareMode)
         {
             ThinkingRichText.Document = MarkdownRenderer.Render(string.Empty);
-            ThinkingExpander.Visibility = Visibility.Collapsed;
-            ThinkingExpander.IsExpanded = false;
+            ReasoningChip.Visibility = Visibility.Collapsed;
+            ReasoningBox.Visibility = Visibility.Collapsed;
             return;
         }
 
+        // 推理过程只占一行：想看的点开，不想看的完全不占高度。
+        ReasoningChip.Content = $"已思考 · {reasoning.Length} 字";
+        ReasoningChip.Visibility = Visibility.Visible;
+
+        // 用户已经展开时不要因为流式刷新把它收起来。
+        if (ReasoningBox.Visibility != Visibility.Visible)
+        {
+            ReasoningBox.Visibility = Visibility.Collapsed;
+        }
+
         ThinkingRichText.Document = MarkdownRenderer.Render(reasoning);
-        ThinkingExpander.Visibility = Visibility.Visible;
-        ThinkingExpander.IsExpanded = false;
+    }
+
+    private void ReasoningChip_Click(object sender, RoutedEventArgs e)
+    {
+        ReasoningBox.Visibility = ReasoningBox.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+    }
+
+    // 模式条（思考 OFF/ON、检索来源、对比开关）只属于「选功能」这一步：
+    // 看回答时把它收起来，把高度让给正文。Ctrl+D 在回答页仍然可用。
+    private void UpdateModeStripVisibility()
+    {
+        ModeStrip.Visibility = ResponsePanel.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private static string AppendSources(string answer, SearchPacket? search)
@@ -1872,9 +1901,12 @@ public partial class MainWindow : Window
         return string.Join(" · ", parts);
     }
 
-    // Tab 切左边（主）模型；` 切右边（对比）模型。都在已启用模型里循环。
-    private void CycleModelChoice(bool rightSide)
+    // Tab 切左边（主）模型；` 切右边（对比）模型；按住 Shift 反向。
+    // 都在已启用模型里循环。
+    private void CycleModelChoice(bool rightSide, bool backwards)
     {
+        var step = backwards ? -1 : 1;
+
         if (rightSide)
         {
             if (!_compareMode)
@@ -1889,7 +1921,7 @@ public partial class MainWindow : Window
             }
 
             var index = candidates.FindIndex(choice => IsSameChoice(choice, _compareChoice));
-            var next = candidates[(index + 1) % candidates.Count];
+            var next = candidates[Wrap(index + step, candidates.Count)];
             _compareChoice = next;
             _config.CompareProviderId = next.Provider.Id;
             _config.CompareModel = next.Model;
@@ -1905,6 +1937,7 @@ public partial class MainWindow : Window
                 _suppressModelSelection = false;
             }
 
+            SaveConfigInBackground();
             return;
         }
 
@@ -1915,11 +1948,17 @@ public partial class MainWindow : Window
 
         var primary = CurrentPrimaryChoice();
         var primaryIndex = primary is null
-            ? -1
+            ? (backwards ? 0 : -1)
             : _modelChoices.FindIndex(choice => IsSameChoice(choice, primary));
-        var nextPrimary = _modelChoices[(primaryIndex + 1) % _modelChoices.Count];
+        var nextPrimary = _modelChoices[Wrap(primaryIndex + step, _modelChoices.Count)];
 
         ApplyModelChoice(nextPrimary);
+    }
+
+    // 负索引也能正确取模：C# 的 % 对负数返回负值，直接用会越界。
+    private static int Wrap(int index, int count)
+    {
+        return ((index % count) + count) % count;
     }
     // 仅供 CI 截图：把面板切到「对比模式」并填两段示例回答。
     // 纯本地渲染、不发任何请求，用来核对左右分栏的布局。
@@ -1928,6 +1967,7 @@ public partial class MainWindow : Window
         ApplyCompareMode(true, save: false);
 
         ResponsePanel.Visibility = Visibility.Visible;
+        UpdateModeStripVisibility();
         FunctionList.Visibility = Visibility.Collapsed;
         ResponseModeText.Text = "回答 · 双模型对比";
         ResponseMetaText.Text = "1.8 秒 · Enter 追问 · ← 返回";
@@ -2062,8 +2102,8 @@ public partial class MainWindow : Window
     private void UpdateShortcutHint()
     {
         ShortcutHintText.Text = _compareMode
-            ? "ESC 关闭 · Tab 切左 · ` 切右"
-            : "ESC 关闭 · Tab 切模型";
+            ? "ESC 关闭 · Tab/⇧Tab 切左 · ` /⇧` 切右"
+            : "ESC 关闭 · Tab/⇧Tab 换模型";
     }
 
     private void ApplyModelChoice(ModelChoice choice)
@@ -2186,6 +2226,7 @@ public partial class MainWindow : Window
         PromptRowDefinition.Height = GridLength.Auto;
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        UpdateModeStripVisibility();
         ClearPendingAttachments();
         StatusText.Text = "↑ ↓ 选择功能，Enter 执行";
         FocusPromptEditor();
@@ -2205,6 +2246,7 @@ public partial class MainWindow : Window
         PromptRowDefinition.Height = GridLength.Auto;
         ResponsePanel.Visibility = Visibility.Collapsed;
         FunctionList.Visibility = Visibility.Visible;
+        UpdateModeStripVisibility();
         SelectFirstFunction();
         RefreshSourceStrip();
         ClearPendingAttachments();
