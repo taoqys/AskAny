@@ -195,13 +195,20 @@ public partial class App : Application
             historyService,
             new ModelCatalogService(_httpClient));
 
-        // --screenshot <输出> [功能索引]：可选指定选中哪一项，
-        // 用于截到来源切换条这类「只在特定选中项下出现」的界面。
-        if (isScreenshot &&
-            e.Args.Length >= 3 &&
-            int.TryParse(e.Args[2], out var previewFunctionIndex))
+        // --screenshot <输出> [功能索引 | compare]：可选指定选中哪一项，
+        // 用于截到来源切换条这类「只在特定选中项下出现」的界面；
+        // 传 compare 则截双模型对比的分栏布局。
+        var previewCompare = false;
+        if (isScreenshot && e.Args.Length >= 3)
         {
-            mainWindow.PreviewFunctionIndex = previewFunctionIndex;
+            if (int.TryParse(e.Args[2], out var previewFunctionIndex))
+            {
+                mainWindow.PreviewFunctionIndex = previewFunctionIndex;
+            }
+            else if (e.Args[2].Equals("compare", StringComparison.OrdinalIgnoreCase))
+            {
+                previewCompare = true;
+            }
         }
 
         mainWindow.Show();
@@ -213,7 +220,7 @@ public partial class App : Application
             // 阻塞 UI 线程会直接死锁（--dump-config 栽过同一个坑）。
             // 改为异步等待、截完自行关闭（ShutdownMode 是 OnExplicitShutdown）。
             SafeTask.Run(
-                () => SaveScreenshotAfterLoadAsync(mainWindow, e.Args[1]),
+                () => SaveScreenshotAfterLoadAsync(mainWindow, e.Args[1], previewCompare),
                 "截图预览");
             return;
         }
@@ -285,7 +292,10 @@ public partial class App : Application
 
     // 有配置文件时 LoadConfigurationAsync 是真正异步的。原来 Show() 之后立刻截图，
     // 截到的是「加载前」状态（模型下拉还是空的），CI 预览会误导人。
-    private async Task SaveScreenshotAfterLoadAsync(MainWindow mainWindow, string outputPath)
+    private async Task SaveScreenshotAfterLoadAsync(
+        MainWindow mainWindow,
+        string outputPath,
+        bool previewCompare)
     {
         try
         {
@@ -294,6 +304,11 @@ public partial class App : Application
         catch (TimeoutException)
         {
             ErrorLog.Write("截图预览：等待初次加载超时");
+        }
+
+        if (previewCompare)
+        {
+            mainWindow.ShowComparePreview();
         }
 
         mainWindow.UpdateLayout();
