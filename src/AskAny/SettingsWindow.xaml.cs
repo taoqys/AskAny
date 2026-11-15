@@ -601,6 +601,22 @@ public partial class SettingsWindow : Window
             : $"{Math.Round(tokens / 1000d):0}K";
     }
 
+    // 仅供截图预览：把新增的卡片滚进可视区域，避免 CI 截图只拍到半截表单。
+    public void PreviewScrollToNewContent(int tabIndex)
+    {
+        switch (tabIndex)
+        {
+            case 0:
+                // 模型页：勾选启用的模型列表
+                EnabledModelsList.BringIntoView();
+                break;
+            case 3:
+                // 窗口页：全局快捷键卡片
+                HotkeyHintText.BringIntoView();
+                break;
+        }
+    }
+
     private void ModelsBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
         // 手改了模型清单后，重新生成勾选列表；已勾选状态能保留。

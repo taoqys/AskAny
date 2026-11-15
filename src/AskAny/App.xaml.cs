@@ -136,9 +136,15 @@ public partial class App : Application
                 WindowStartupLocation = WindowStartupLocation.CenterScreen
             };
             settings.Show();
+            settings.UpdateLayout();
             if (e.Args.Length >= 3 && int.TryParse(e.Args[2], out var tabIndex))
             {
                 settings.PreviewTabIndex = tabIndex;
+                settings.UpdateLayout();
+
+                // 模型页与窗口页的新卡片比可视区域高，截图前滚到新增内容，
+                // 否则 CI 截图就只能拍到半截表单。
+                settings.PreviewScrollToNewContent(tabIndex);
             }
 
             settings.UpdateLayout();
