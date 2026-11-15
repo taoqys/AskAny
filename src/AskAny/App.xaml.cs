@@ -344,6 +344,20 @@ public partial class App : Application
                 {
                     report.AppendLine($"流式  ：失败（真实使用时会回退到非流式）—— {exception.Message}");
                 }
+
+                try
+                {
+                    var catalog = await new ModelCatalogService(http).FetchAsync(provider, key);
+                    report.AppendLine(
+                        $"模型  ：成功，{catalog.Models.Count} 个（图片 {catalog.VisionModels.Count}、" +
+                        $"推理 {catalog.ReasoningModels.Count}）");
+                    report.AppendLine($"  示例：{string.Join("、", catalog.Models.Take(6))}");
+                    report.AppendLine($"  支持图片：{string.Join("、", catalog.VisionModels.Take(6))}");
+                }
+                catch (Exception exception)
+                {
+                    report.AppendLine($"模型  ：失败 —— {exception.Message}");
+                }
             }).GetAwaiter().GetResult();
         }
         catch (Exception exception)
