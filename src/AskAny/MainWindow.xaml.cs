@@ -260,6 +260,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+N 开始新话题：清空上下文，但仍然是「即用即走」，不做会话列表。
+        if (e.Key == Key.N && Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            StartNewTopic();
+            e.Handled = true;
+            return;
+        }
+
         // PgUp / PgDn 循环切换来源：不用记数字映射，两个大键盲按也能命中。
         // 仅在来源条可见（选中检索类功能）时接管，否则交还给列表滚动。
         if ((e.Key is Key.PageUp or Key.PageDown) &&
@@ -717,6 +725,13 @@ public partial class MainWindow : Window
                 $"{stopwatch.Elapsed.TotalSeconds:F1} 秒{sourceText} · Enter 追问 · ← 返回";
             StatusText.Text = "执行完成";
 
+            // 首轮提问时才确定话题 id 与标题，避免空话题也占一个 id。
+            if (string.IsNullOrWhiteSpace(_topicId))
+            {
+                _topicId = Guid.NewGuid().ToString("N");
+                _topicTitle = BuildTopicTitle(prompt);
+            }
+
             await _historyService.AddAsync(new HistoryEntry
             {
                 FunctionId = option.Id,
@@ -728,7 +743,9 @@ public partial class MainWindow : Window
                 Response = displayAnswer,
                 Reasoning = result.Reasoning ?? string.Empty,
                 ImageCount = images.Count,
-                SourceCount = search?.Sources.Count ?? 0
+                SourceCount = search?.Sources.Count ?? 0,
+                TopicId = _topicId,
+                TopicTitle = _topicTitle
             });
         }
         catch (OperationCanceledException) when (_lastRequestCancelledByUser)
@@ -1164,6 +1181,81 @@ public partial class MainWindow : Window
         }
 
         return Math.Clamp((int)(tokens * 0.4), MinimumConversationCharacters, MaximumConversationCharacters);
+    }
+
+    // 话题：一次连续追问算一个话题。不做成会话列表 —— AskAny 的核心仍是
+    // 「双击即用」的一次性提问，话题只用来把多轮上下文与历史串起来。
+    private string _topicId = string.Empty;
+    private string _topicTitle = string.Empty;
+
+    // Ctrl+N：开始新话题（清空上下文），回到功能列表。
+    private void StartNewTopic()
+    {
+        _conversation.Clear();
+        _topicId = string.Empty;
+        _topicTitle = string.Empty;
+
+        ResetForNewRequest();
+        ResponsePanel.Visibility = Visibility.Collapsed;
+        FunctionList.Visibility = Visibility.Visible;
+        FunctionList.SelectedIndex = 0;
+
+        StatusText.Text = "已开始新话题";
+    }
+
+    // 历史里「继续该话题」：把该话题的历史问答按时间顺序还原成对话上下文，
+    // 这样追问时模型能看到之前的内容，而不是从零开始。
+    private async Task RestoreTopicContextAsync(string topicId, string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(topicId))
+        {
+            return;
+        }
+
+        var entries = await _historyService.LoadAsync();
+        var topicEntries = entries
+            .Where(entry => entry.TopicId.Equals(topicId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(entry => entry.Timestamp)
+            .ToList();
+
+        if (topicEntries.Count == 0)
+        {
+            return;
+        }
+
+        _conversation.Clear();
+        var restored = 0;
+        foreach (var entry in topicEntries)
+        {
+            if (string.IsNullOrWhiteSpace(entry.Prompt))
+            {
+                continue;
+            }
+
+            _conversation.Add(new ConversationTurn("user", entry.Prompt));
+            restored++;
+
+            if (!string.IsNullOrWhiteSpace(entry.Response))
+            {
+                _conversation.Add(new ConversationTurn("assistant", entry.Response));
+            }
+        }
+
+        TrimConversation();
+
+        _topicId = topicId;
+        _topicTitle = topicEntries[0].TopicTitle;
+        StatusText.Text = $"已恢复话题上下文（{restored} 轮），可直接追问";
+    }
+
+    // 话题标题取首条提问的第一行，压到 24 个字以内，够在历史里认出是哪段对话。
+    private static string BuildTopicTitle(string prompt)
+    {
+        var firstLine = prompt.ReplaceLineEndings("\n")
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault()?.Trim() ?? "新话题";
+
+        return firstLine.Length <= 24 ? firstLine : firstLine[..24] + "…";
     }
 
     private void SetOutputMarkdown(string markdown, string? reasoning)
@@ -1842,6 +1934,12 @@ public partial class MainWindow : Window
                                     ?? _functions.FirstOrDefault();
                 ShowWorkflowList();
                 PromptBox.Focus();
+
+                // ShowWorkflowList 会清空上下文，所以话题恢复必须放在它之后。
+                if (!string.IsNullOrWhiteSpace(entry.TopicId))
+                {
+                    await RestoreTopicContextAsync(entry.TopicId, entry.Prompt);
+                }
             }
         }
         finally

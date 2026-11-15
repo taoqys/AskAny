@@ -141,4 +141,21 @@ public class HistoryServiceTests : IDisposable
 
         Assert.Empty(entries);
     }
+
+    // 话题信息必须能存下来：历史按话题分组、以及「继续该话题」都依赖这两个字段。
+    [Fact]
+    public async Task TopicFieldsRoundTrip()
+    {
+        var service = new HistoryService(_path);
+        var entry = Entry("问题", "回答");
+        entry.TopicId = "topic-1";
+        entry.TopicTitle = "关于 WPF 的讨论";
+
+        await service.AddAsync(entry);
+        var stored = (await service.LoadAsync()).Single();
+
+        Assert.Equal("topic-1", stored.TopicId);
+        Assert.Equal("关于 WPF 的讨论", stored.TopicTitle);
+        Assert.Contains("话题：关于 WPF 的讨论", stored.DisplayMeta);
+    }
 }

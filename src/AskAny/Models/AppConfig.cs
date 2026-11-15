@@ -253,5 +253,6 @@ public sealed class HistoryEntry
     [JsonIgnore]
     public string DisplayMeta =>
         $"{Timestamp:MM-dd HH:mm} · {ModeName} · {ProviderName} / {Model}" +
-        (ImageCount > 0 ? $" · {ImageCount} 张图片" : string.Empty);
+        (ImageCount > 0 ? $" · {ImageCount} 张图片" : string.Empty) +
+        (string.IsNullOrWhiteSpace(TopicTitle) ? string.Empty : $" · 话题：{TopicTitle}");
 }
