@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny"
         Width="660"
-        Height="470"
+        Height="504"
         MinWidth="560"
-        MinHeight="420"
+        MinHeight="452"
         WindowStyle="None"
         ResizeMode="CanResizeWithGrip"
         AllowsTransparency="True"
@@ -40,14 +40,68 @@
                 <RowDefinition Height="48" />
             </Grid.RowDefinitions>
 
-            <Grid Grid.Row="0"
-                  MinHeight="48"
-                  Margin="12,6,6,6"
-                  MouseLeftButtonDown="Header_MouseLeftButtonDown"
-                  AllowDrop="True"
-                  DragOver="Input_DragOver"
-                  Drop="Input_Drop">
+            <Grid Grid.Row="0">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 模型 tab：只显示设置里勾选启用的模型，点一下即切换。
+                     只有一个模型时它同时充当「当前模型」提示，所以不做隐藏。 -->
+                <ScrollViewer x:Name="ModelTabScroll"
+                              Grid.Row="0"
+                              Margin="12,6,10,0"
+                              HorizontalScrollBarVisibility="Hidden"
+                              VerticalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="ModelTabStrip"
+                                  AutomationProperties.AutomationId="ModelTabs"
+                                  AutomationProperties.Name="模型切换">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="Tab"
+                                        Margin="0,0,4,0"
+                                        Padding="9,3"
+                                        Background="Transparent"
+                                        CornerRadius="6"
+                                        Cursor="Hand"
+                                        Tag="{Binding}"
+                                        MouseLeftButtonUp="ModelTab_Click">
+                                    <Border.ToolTip>
+                                        <ToolTip Content="{Binding ToolTip}" />
+                                    </Border.ToolTip>
+                                    <TextBlock x:Name="TabLabel"
+                                               FontSize="11.5"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               Text="{Binding Label}" />
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                        <Setter TargetName="Tab" Property="Background" Value="{StaticResource AccentSoftBrush}" />
+                                        <Setter TargetName="TabLabel" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Setter TargetName="TabLabel" Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                    <Trigger SourceName="Tab" Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="TabLabel" Property="Foreground" Value="{StaticResource InkBrush}" />
+                                    </Trigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Grid Grid.Row="1"
+                      MinHeight="48"
+                      Margin="12,2,6,6"
+                      MouseLeftButtonDown="Header_MouseLeftButtonDown"
+                      AllowDrop="True"
+                      DragOver="Input_DragOver"
+                      Drop="Input_Drop">
+                    <Grid.RowDefinitions>
                     <RowDefinition Height="44" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -195,6 +249,7 @@
                                Foreground="{StaticResource MutedBrush}"
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
+                </Grid>
             </Grid>
 
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
@@ -461,8 +516,6 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal"
@@ -491,28 +544,7 @@
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="1"
-                           Margin="0,0,5,0"
-                           VerticalAlignment="Center"
-                           FontSize="11"
-                           Foreground="{StaticResource MutedBrush}"
-                           Text="模型" />
-                <ComboBox x:Name="ModelComboBox"
-                          AutomationProperties.AutomationId="ModelComboBox"
-                          AutomationProperties.Name="模型选择"
-                          Grid.Column="2"
-                          Width="200"
-                          Height="30"
-                          Margin="0,0,4,0"
-                          VerticalAlignment="Center"
-                          Style="{StaticResource ComboField}"
-                          DisplayMemberPath="DisplayName"
-                          IsEditable="True"
-                          IsTextSearchEnabled="True"
-                          SelectionChanged="ModelComboBox_SelectionChanged"
-                          LostKeyboardFocus="ModelComboBox_LostKeyboardFocus" />
-
-                <Button Grid.Column="3"
+                <Button Grid.Column="1"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="HistoryButton"
                         AutomationProperties.Name="历史记录"
@@ -523,7 +555,7 @@
                                Text="&#xE81C;" />
                 </Button>
 
-                <Button Grid.Column="4"
+                <Button Grid.Column="2"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="SettingsButton"
                         AutomationProperties.Name="设置"

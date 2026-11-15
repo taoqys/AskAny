@@ -34,7 +34,6 @@ public partial class MainWindow : Window
     private bool _isRunning;
     private bool _allowClose;
     private bool _suppressDeactivateHide;
-    private bool _isRefreshingModels;
     private bool _isFocusingPrompt;
     private bool _isFollowUpInput;
     private bool _isCapturingScreenshot;
@@ -300,8 +299,7 @@ public partial class MainWindow : Window
             {
                 if (_isFollowUpInput)
                 {
-                    CommitModelSelection();
-                    _ = ExecuteFollowUpAsync();
+                                _ = ExecuteFollowUpAsync();
                 }
                 else
                 {
@@ -339,8 +337,7 @@ public partial class MainWindow : Window
         {
             if (PromptEditorBorder.Visibility == Visibility.Visible)
             {
-                CommitModelSelection();
-                SafeTask.Run(() => ExecuteSelectedAsync(), "执行请求", message => StatusText.Text = message);
+                        SafeTask.Run(() => ExecuteSelectedAsync(), "执行请求", message => StatusText.Text = message);
             }
 
             e.Handled = true;
@@ -1334,88 +1331,105 @@ public partial class MainWindow : Window
         RefreshSourceStrip();
     }
 
-    private void ModelComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    // 点击模型 tab 切换。视觉上的「选中」由重建 tab 列表实现（模型数量很少，重建很便宜）。
+    private void ModelTab_Click(object sender, MouseButtonEventArgs e)
     {
-        if (_isRefreshingModels || ModelComboBox.SelectedItem is not ModelChoice choice)
+        if (sender is FrameworkElement { Tag: ModelTabItem item })
         {
-            return;
+            ApplyModelChoice(item.Choice);
+            e.Handled = true;
         }
-
-        ApplyModelChoice(choice);
-    }
-
-    private void ModelComboBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
-    {
-        CommitModelSelection();
-    }
-
-    private void CommitModelSelection()
-    {
-        var typedValue = ModelComboBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(typedValue))
-        {
-            return;
-        }
-
-        var selectedChoice = _modelChoices.FirstOrDefault(choice =>
-            choice.DisplayName.Equals(typedValue, StringComparison.OrdinalIgnoreCase) ||
-            choice.Model.Equals(typedValue, StringComparison.OrdinalIgnoreCase));
-        if (selectedChoice is not null)
-        {
-            ModelComboBox.SelectedItem = selectedChoice;
-            ApplyModelChoice(selectedChoice);
-            return;
-        }
-
-        var provider = _currentProvider ?? _config.Providers.FirstOrDefault();
-        if (provider is null)
-        {
-            return;
-        }
-
-        if (!provider.Models.Contains(typedValue, StringComparer.OrdinalIgnoreCase))
-        {
-            provider.Models.Add(typedValue);
-        }
-
-        _currentProvider = provider;
-        provider.SelectedModel = typedValue;
-        _config.SelectedProviderId = provider.Id;
-        RefreshModelChoices();
-        SaveConfigInBackground();
     }
 
     private void RefreshModelChoices()
     {
-        _isRefreshingModels = true;
-        try
+        // 只列「已启用」的模型：设置里没勾选的模型不出现在主界面。
+        _modelChoices = _config.Providers
+            .SelectMany(provider => provider.EffectiveModels()
+                .Select(model => new ModelChoice(provider, model)))
+            .ToList();
+
+        var preferred = _modelChoices.FirstOrDefault(choice =>
+                            choice.Provider.Id == _config.SelectedProviderId &&
+                            choice.Model.Equals(
+                                choice.Provider.SelectedModel,
+                                StringComparison.OrdinalIgnoreCase))
+                        ?? _modelChoices.FirstOrDefault();
+
+        _currentProvider = preferred?.Provider ?? _config.Providers.FirstOrDefault();
+
+        // 同一模型名出现在多个提供商下时，tab 上补提供商名，否则只显示模型名。
+        var duplicatedModels = _modelChoices
+            .GroupBy(choice => choice.Model, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Select(choice => choice.Provider.Id).Distinct().Count() > 1)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var tabs = _modelChoices
+            .Select(choice => new ModelTabItem(
+                choice,
+                IsSameChoice(choice, preferred),
+                duplicatedModels.Contains(choice.Model)
+                    ? $"{choice.Provider.Name} · {choice.Model}"
+                    : choice.Model,
+                BuildModelTabToolTip(choice)))
+            .ToList();
+
+        ModelTabStrip.ItemsSource = null;
+        ModelTabStrip.ItemsSource = tabs;
+        ModelTabScroll.Visibility = tabs.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        UpdateAttachmentTargetText();
+    }
+
+    private static bool IsSameChoice(ModelChoice left, ModelChoice? right)
+    {
+        return right is not null &&
+               left.Provider.Id == right.Provider.Id &&
+               left.Model.Equals(right.Model, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // tab 悬停提示：提供商 / 模型 + 能力标签（图片、推理、是否始终思考、上下文长度）。
+    private static string BuildModelTabToolTip(ModelChoice choice)
+    {
+        var capability = ModelCapabilities.Infer(choice.Model);
+        var parts = new List<string> { $"{choice.Provider.Name} / {choice.Model}" };
+
+        if (capability.SupportsVision)
         {
-            // 只列「已启用」的模型：设置里没勾选的模型不出现在主界面。
-            _modelChoices = _config.Providers
-                .SelectMany(provider => provider.EffectiveModels()
-                    .Select(model => new ModelChoice(provider, model)))
-                .ToList();
-
-            ModelComboBox.ItemsSource = null;
-            ModelComboBox.ItemsSource = _modelChoices;
-
-            var preferred = _modelChoices.FirstOrDefault(choice =>
-                                choice.Provider.Id == _config.SelectedProviderId &&
-                                choice.Model.Equals(
-                                    choice.Provider.SelectedModel,
-                                    StringComparison.OrdinalIgnoreCase))
-                            ?? _modelChoices.FirstOrDefault();
-
-            _currentProvider = preferred?.Provider ?? _config.Providers.FirstOrDefault();
-            ModelComboBox.SelectedItem = preferred;
-            ModelComboBox.Text = preferred?.DisplayName ?? string.Empty;
-            ModelComboBox.ToolTip = preferred?.DisplayName ?? "请先配置模型";
-            UpdateAttachmentTargetText();
+            parts.Add("支持图片");
         }
-        finally
+
+        if (capability.SupportsReasoning)
         {
-            _isRefreshingModels = false;
+            parts.Add(capability.CanDisableReasoning == false ? "推理（始终思考）" : "支持推理");
         }
+
+        if (capability.ContextTokens is { } tokens and > 0)
+        {
+            parts.Add($"上下文 {tokens / 1000}K");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private sealed class ModelTabItem
+    {
+        public ModelTabItem(ModelChoice choice, bool isActive, string label, string toolTip)
+        {
+            Choice = choice;
+            IsActive = isActive;
+            Label = label;
+            ToolTip = toolTip;
+        }
+
+        public ModelChoice Choice { get; }
+
+        public string Label { get; }
+
+        public string ToolTip { get; }
+
+        public bool IsActive { get; }
     }
 
     private void ApplyModelChoice(ModelChoice choice)
@@ -1423,6 +1437,10 @@ public partial class MainWindow : Window
         _currentProvider = choice.Provider;
         choice.Provider.SelectedModel = choice.Model;
         _config.SelectedProviderId = choice.Provider.Id;
+
+        // 重建 tab 列表以更新「当前选中」高亮。
+        RefreshModelChoices();
+
         UpdateAttachmentTargetText();
         SaveConfigInBackground();
     }
@@ -1434,7 +1452,6 @@ public partial class MainWindow : Window
 
     private async void OpenSettings()
     {
-        CommitModelSelection();
         _suppressDeactivateHide = true;
 
         try
