@@ -31,7 +31,7 @@ public class ModelCatalogServiceTests
         };
     }
 
-    private static ModelCatalogService Build(StubHttpMessageHandler handler)
+    private static ModelCatalogService Build(HttpMessageHandler handler)
     {
         return new ModelCatalogService(new HttpClient(handler));
     }
