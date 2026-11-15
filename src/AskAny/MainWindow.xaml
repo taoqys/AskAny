@@ -628,7 +628,7 @@
                               Width="140"
                               Height="28"
                               Style="{StaticResource ComboField}"
-                              DisplayMemberPath="DisplayName"
+                              DisplayMemberPath="Model"
                               IsTextSearchEnabled="False"
                               SelectionChanged="LeftModelComboBox_SelectionChanged" />
                     <TextBlock x:Name="CompareArrowText"
@@ -644,7 +644,7 @@
                               Width="140"
                               Height="28"
                               Style="{StaticResource ComboField}"
-                              DisplayMemberPath="DisplayName"
+                              DisplayMemberPath="Model"
                               IsTextSearchEnabled="False"
                               Visibility="Collapsed"
                               SelectionChanged="RightModelComboBox_SelectionChanged" />

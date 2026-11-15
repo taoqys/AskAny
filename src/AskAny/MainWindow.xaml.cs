@@ -1881,9 +1881,14 @@ public partial class MainWindow : Window
         ResponseModeText.Text = "回答 · 双模型对比";
         ResponseMetaText.Text = "1.8 秒 · Enter 追问 · ← 返回";
 
-        PrimaryModelText.Text = "OpenAI · gpt-4.1-mini";
+        // 标签取自实际选中的模型，保证截图里的「两栏模型」和底栏选择框一致。
+        PrimaryModelText.Text = _currentProvider is null
+            ? "左栏"
+            : $"{_currentProvider.Name} · {_currentProvider.SelectedModel}";
         PrimaryMetaText.Text = "完成 · 1.8 秒";
-        CompareModelText.Text = "DeepSeek · deepseek-flash";
+        CompareModelText.Text = _compareChoice is null
+            ? "右栏"
+            : $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
         CompareMetaText.Text = "完成 · 2.1 秒";
 
         SetOutputMarkdown(
