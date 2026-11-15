@@ -674,6 +674,7 @@ public partial class MainWindow : Window
         if (_compareMode)
         {
             PrimaryModelText.Text = $"{provider.Name} · {provider.SelectedModel}";
+            PrimaryMetaText.Text = "生成中…";
             CompareModelText.Text = _compareChoice is null
                 ? "未选择"
                 : $"{_compareChoice.Provider.Name} · {_compareChoice.Model}";
@@ -723,6 +724,11 @@ public partial class MainWindow : Window
             var sourceText = search is null ? string.Empty : $"，{search.Sources.Count} 条来源";
             ResponseMetaText.Text =
                 $"{stopwatch.Elapsed.TotalSeconds:F1} 秒{sourceText} · Enter 追问 · ← 返回";
+
+            if (_compareMode)
+            {
+                PrimaryMetaText.Text = $"{stopwatch.Elapsed.TotalSeconds:F1} 秒";
+            }
             StatusText.Text = "执行完成";
 
             // 首轮提问时才确定话题 id 与标题，避免空话题也占一个 id。
@@ -1720,6 +1726,7 @@ public partial class MainWindow : Window
         ResponseMetaText.Text = "1.8 秒 · Enter 追问 · ← 返回";
 
         PrimaryModelText.Text = "OpenAI · gpt-4.1-mini";
+        PrimaryMetaText.Text = "完成 · 1.8 秒";
         CompareModelText.Text = "DeepSeek · deepseek-flash";
         CompareMetaText.Text = "完成 · 2.1 秒";
 
@@ -1800,6 +1807,10 @@ public partial class MainWindow : Window
                 ? new GridLength(1, GridUnitType.Star)
                 : new GridLength(0);
             PrimaryModelText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
+            PrimaryMetaText.Visibility = _compareMode ? Visibility.Visible : Visibility.Collapsed;
+
+            // 对比模式下两栏各自显示耗时，共享的那行元信息就藏起来，避免和两栏打架。
+            ResponseMetaText.Visibility = _compareMode ? Visibility.Collapsed : Visibility.Visible;
 
             if (_compareMode)
             {
