@@ -111,7 +111,9 @@ public partial class SettingsWindow : Window
         StartWithWindowsCheck.IsChecked = StartupService.IsEnabled();
         HideWhenDeactivatedCheck.IsChecked = config.HideWhenDeactivated;
         AutoFillSelectionCheck.IsChecked = config.AutoFillSelectedText;
-        ScreenshotHotkeyCheck.IsChecked = config.ScreenshotHotkeyEnabled;
+
+        // 全局快捷键：修饰键 + 双击间隔，默认仍是双击 Shift 唤起、双击 Ctrl 截图。
+        InitializeHotkeySelectors(config);
 
         ProviderList.ItemsSource = _providers;
         ProviderList.SelectedItem = _providers.FirstOrDefault(
@@ -129,6 +131,81 @@ public partial class SettingsWindow : Window
             LoadFunctionToForm(_selectedFunction);
             ProviderNameBox.Focus();
         };
+    }
+
+    // 快捷键下拉：三个修饰键 + 四档双击间隔。
+    private static readonly HotkeyModifierOption[] HotkeyModifierOptions =
+    [
+        new(HotkeyModifier.Shift, "Shift"),
+        new(HotkeyModifier.Control, "Ctrl"),
+        new(HotkeyModifier.Alt, "Alt")
+    ];
+
+    private static readonly int[] HotkeyIntervalOptions = [200, 300, 400, 500];
+
+    private void InitializeHotkeySelectors(AppConfig config)
+    {
+        SelectionModifierBox.ItemsSource = HotkeyModifierOptions;
+        SelectionModifierBox.DisplayMemberPath = nameof(HotkeyModifierOption.DisplayName);
+        ScreenshotModifierBox.ItemsSource = HotkeyModifierOptions;
+        ScreenshotModifierBox.DisplayMemberPath = nameof(HotkeyModifierOption.DisplayName);
+
+        HotkeyIntervalBox.ItemsSource = HotkeyIntervalOptions
+            .Select(ms => new HotkeyIntervalOption(ms))
+            .ToArray();
+        HotkeyIntervalBox.DisplayMemberPath = nameof(HotkeyIntervalOption.DisplayName);
+
+        SelectionModifierBox.SelectedItem = HotkeyModifierOptions
+            .First(option => option.Modifier == config.SelectionHotkeyModifier);
+        ScreenshotModifierBox.SelectedItem = HotkeyModifierOptions
+            .First(option => option.Modifier == config.ScreenshotHotkeyModifier);
+        HotkeyIntervalBox.SelectedItem = HotkeyIntervalBox.Items
+            .Cast<HotkeyIntervalOption>()
+            .First(option => option.Milliseconds == config.HotkeyDoubleTapIntervalMs)
+            ?? HotkeyIntervalBox.Items
+                .Cast<HotkeyIntervalOption>()
+                .OrderBy(option => Math.Abs(option.Milliseconds - config.HotkeyDoubleTapIntervalMs))
+                .First();
+
+        ScreenshotHotkeyCheck.IsChecked = config.ScreenshotHotkeyEnabled;
+        ScreenshotModifierBox.IsEnabled = config.ScreenshotHotkeyEnabled;
+
+        SelectionModifierBox.SelectionChanged += (_, _) => RefreshHotkeyHint();
+        ScreenshotModifierBox.SelectionChanged += (_, _) => RefreshHotkeyHint();
+        ScreenshotHotkeyCheck.Checked += (_, _) => RefreshHotkeyHint();
+        ScreenshotHotkeyCheck.Unchecked += (_, _) => RefreshHotkeyHint();
+
+        RefreshHotkeyHint();
+    }
+
+    private void RefreshHotkeyHint()
+    {
+        var selection = (SelectionModifierBox.SelectedItem as HotkeyModifierOption)?.DisplayName ?? "Shift";
+        var screenshot = (ScreenshotModifierBox.SelectedItem as HotkeyModifierOption)?.DisplayName ?? "Ctrl";
+        var enabled = ScreenshotHotkeyCheck.IsChecked == true;
+
+        ScreenshotModifierBox.IsEnabled = enabled;
+
+        if (!enabled)
+        {
+            HotkeyHintText.Text = $"双击 {selection} 唤起面板；区域截图已关闭。";
+            return;
+        }
+
+        if (string.Equals(selection, screenshot, StringComparison.Ordinal))
+        {
+            HotkeyHintText.Text = "两个手势不能使用同一个修饰键，请换一个，否则截图手势不会生效。";
+            return;
+        }
+
+        HotkeyHintText.Text = $"双击 {selection} 唤起面板，双击 {screenshot} 区域截图。";
+    }
+
+    private sealed record HotkeyModifierOption(HotkeyModifier Modifier, string DisplayName);
+
+    private sealed record HotkeyIntervalOption(int Milliseconds)
+    {
+        public string DisplayName => $"{Milliseconds} 毫秒";
     }
 
     private async void TestButton_Click(object sender, RoutedEventArgs e)
@@ -189,6 +266,16 @@ public partial class SettingsWindow : Window
             return;
         }
 
+        // 两个手势用同一个修饰键时，截图会被唤起手势吃掉，先拦下来。
+        if (ScreenshotHotkeyCheck.IsChecked == true &&
+            SelectionModifierBox.SelectedItem is HotkeyModifierOption selectionOption &&
+            ScreenshotModifierBox.SelectedItem is HotkeyModifierOption screenshotOption &&
+            selectionOption.Modifier == screenshotOption.Modifier)
+        {
+            SettingsStatusText.Text = "唤起与截图不能使用同一个修饰键";
+            return;
+        }
+
         _config.Providers = _providers.Select(provider => provider.Clone()).ToList();
         _config.Functions = _functions.Select(function => function.Clone()).ToList();
         _config.SelectedProviderId = _selectedProvider!.Id;
@@ -206,6 +293,21 @@ public partial class SettingsWindow : Window
         _config.AutoFillSelectedText = AutoFillSelectionCheck.IsChecked == true;
         _config.ScreenshotHotkeyEnabled = ScreenshotHotkeyCheck.IsChecked == true;
         _config.StartWithWindows = startWithWindows;
+
+        if (SelectionModifierBox.SelectedItem is HotkeyModifierOption selectionModifier)
+        {
+            _config.SelectionHotkeyModifier = selectionModifier.Modifier;
+        }
+
+        if (ScreenshotModifierBox.SelectedItem is HotkeyModifierOption screenshotModifier)
+        {
+            _config.ScreenshotHotkeyModifier = screenshotModifier.Modifier;
+        }
+
+        if (HotkeyIntervalBox.SelectedItem is HotkeyIntervalOption interval)
+        {
+            _config.HotkeyDoubleTapIntervalMs = interval.Milliseconds;
+        }
 
         SaveButton.IsEnabled = false;
         try
@@ -383,6 +485,9 @@ public partial class SettingsWindow : Window
             ModelsBox.Text = string.Join(Environment.NewLine, result.Models);
             VisionModelsBox.Text = string.Join(Environment.NewLine, result.VisionModels);
 
+            // 重新生成勾选列表：默认全选，用户再手动挑要启用哪些。
+            RebuildEnabledModelsList(provider);
+
             ModelFetchStatusText.Text =
                 $"已获取 {result.Models.Count} 个模型：{result.VisionModels.Count} 个支持图片、" +
                 $"{result.ReasoningModels.Count} 个支持推理。能力来自内置快照，可手动修改。";
@@ -431,6 +536,134 @@ public partial class SettingsWindow : Window
         }
     }
 
+    // 主界面 tab 上显示的模型清单：全量模型 + 能力标签 + 是否启用。
+    private void RebuildEnabledModelsList(ProviderConfig? provider)
+    {
+        var models = ParseModels(ModelsBox.Text);
+        var previous = (EnabledModelsList.ItemsSource as IEnumerable<ModelEnableItem> ?? [])
+            .ToDictionary(item => item.Name, item => item.IsEnabled, StringComparer.OrdinalIgnoreCase);
+
+        // 该提供商勾选过的集合；为空表示「全部启用」。
+        var enabled = (provider?.EnabledModels ?? [])
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var items = models
+            .Select(name => new ModelEnableItem(
+                name,
+                DescribeCapability(name),
+                enabled.Count == 0
+                    ? (previous.TryGetValue(name, out var keep) ? keep : true)
+                    : enabled.Contains(name)))
+            .ToList();
+
+        EnabledModelsList.ItemsSource = items;
+        UpdateEnabledModelsHint(items, models.Count);
+    }
+
+    private void UpdateEnabledModelsHint(IReadOnlyCollection<ModelEnableItem> items, int total)
+    {
+        var enabledCount = items.Count(item => item.IsEnabled);
+
+        EnabledModelsHint.Text = total == 0
+            ? "先填写或从供应商获取模型列表。"
+            : $"共 {total} 个模型，已启用 {enabledCount} 个。主界面只显示已启用的模型 tab。";
+    }
+
+    // 能力标签用内置快照推断：图片 / 推理 / 始终思考 / 上下文长度。
+    private static string DescribeCapability(string model)
+    {
+        var capability = ModelCapabilities.Infer(model);
+        var parts = new List<string>();
+
+        if (capability.SupportsVision)
+        {
+            parts.Add("图片");
+        }
+
+        if (capability.SupportsReasoning)
+        {
+            parts.Add(capability.CanDisableReasoning == false ? "推理(始终)" : "推理");
+        }
+
+        if (capability.ContextTokens is { } tokens and > 0)
+        {
+            parts.Add(FormatContext(tokens));
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string FormatContext(int tokens)
+    {
+        return tokens >= 1_000_000
+            ? $"{tokens / 1_000_000d:0.#}M"
+            : $"{Math.Round(tokens / 1000d):0}K";
+    }
+
+    private void ModelsBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        // 手改了模型清单后，重新生成勾选列表；已勾选状态能保留。
+        if (!_isLoadingProvider)
+        {
+            RebuildEnabledModelsList(_selectedProvider);
+        }
+    }
+
+    private void SelectAllModelsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetAllModelsEnabled(true);
+    }
+
+    private void SelectNoModelsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetAllModelsEnabled(false);
+    }
+
+    private void SetAllModelsEnabled(bool enabled)
+    {
+        if (EnabledModelsList.ItemsSource is not IEnumerable<ModelEnableItem> items)
+        {
+            return;
+        }
+
+        var list = items.ToList();
+        foreach (var item in list)
+        {
+            item.IsEnabled = enabled;
+        }
+
+        // 记录型绑定不会自己刷新勾选状态，重建一次 ItemsSource 最稳。
+        EnabledModelsList.ItemsSource = null;
+        EnabledModelsList.ItemsSource = list;
+        UpdateEnabledModelsHint(list, list.Count);
+    }
+
+    private void EnabledModelsList_Changed(object sender, RoutedEventArgs e)
+    {
+        if (EnabledModelsList.ItemsSource is IEnumerable<ModelEnableItem> items)
+        {
+            var list = items.ToList();
+            UpdateEnabledModelsHint(list, list.Count);
+        }
+    }
+
+    private sealed class ModelEnableItem
+    {
+        public ModelEnableItem(string name, string capabilityText, bool isEnabled)
+        {
+            Name = name;
+            CapabilityText = capabilityText;
+            IsEnabled = isEnabled;
+        }
+
+        public string Name { get; }
+
+        public string CapabilityText { get; }
+
+        public bool IsEnabled { get; set; }
+    }
+
     private void LoadProviderToForm(ProviderConfig? provider)
     {
         _isLoadingProvider = true;
@@ -457,6 +690,7 @@ public partial class SettingsWindow : Window
 
             ModelsBox.Text = string.Join(Environment.NewLine, provider.Models);
             VisionModelsBox.Text = string.Join(Environment.NewLine, provider.VisionModels);
+            RebuildEnabledModelsList(provider);
             ReasoningCheck.IsChecked = provider.SupportsReasoningControl;
             ReasoningEffortComboBox.SelectedItem = ReasoningEffortComboBox.Items
                 .Cast<string>()
@@ -507,6 +741,27 @@ public partial class SettingsWindow : Window
 
         _selectedProvider.VisionModels = ParseModels(VisionModelsBox.Text);
         _selectedProvider.VisionModelsConfigured = true;
+
+        // 启用集合来自勾选列表。全部启用时写空，表示「全部启用」（老配置语义）。
+        var checkedByName = (EnabledModelsList.ItemsSource as IEnumerable<ModelEnableItem> ?? [])
+            .ToDictionary(item => item.Name, item => item.IsEnabled, StringComparer.OrdinalIgnoreCase);
+
+        // 勾选列表里还没有的模型（刚获取 / 刚手填、尚未重建列表）默认视为启用，
+        // 否则会在用户不知情的情况下把它们禁掉。
+        var enabledNames = _selectedProvider.Models
+            .Where(name => !checkedByName.TryGetValue(name, out var isEnabled) || isEnabled)
+            .ToList();
+
+        _selectedProvider.EnabledModels =
+            enabledNames.Count == _selectedProvider.Models.Count ? [] : enabledNames;
+
+        // 当前选中的模型必须还在启用集合里，否则主界面会选到一个不存在的 tab。
+        var effective = _selectedProvider.EffectiveModels();
+        if (effective.Count > 0 &&
+            !effective.Contains(_selectedProvider.SelectedModel, StringComparer.OrdinalIgnoreCase))
+        {
+            _selectedProvider.SelectedModel = effective[0];
+        }
 
         _selectedProvider.SupportsReasoningControl = ReasoningCheck.IsChecked == true;
         _selectedProvider.ReasoningEffort = ReasoningEffortComboBox.SelectedItem as string ?? "high";

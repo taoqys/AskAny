@@ -18,6 +18,34 @@ public partial class App : Application
     private GlobalDoubleTapHook? _doubleTapHook;
     private DispatcherTimer? _hotkeyWatchdog;
     private bool _hotkeyFailureNotified;
+
+    // 手势映射：哪个修饰键双击对应哪个动作。配置加载后由 MainWindow 调 ApplyHotkeyConfig 写入。
+    private HotkeyModifier _selectionModifier = HotkeyModifier.Shift;
+    private HotkeyModifier? _screenshotModifier = HotkeyModifier.Control;
+
+    // 设置保存后由 MainWindow 调用，让改键立即生效（不必重启）。
+    public void ApplyHotkeyConfig(AppConfig config)
+    {
+        _selectionModifier = config.SelectionHotkeyModifier;
+        _screenshotModifier = config.ScreenshotHotkeyEnabled ? config.ScreenshotHotkeyModifier : null;
+
+        if (_doubleTapHook is not null)
+        {
+            _doubleTapHook.IntervalMs = config.HotkeyDoubleTapIntervalMs;
+        }
+    }
+
+    private void OnDoubleTap(MainWindow mainWindow, HotkeyModifier modifier)
+    {
+        if (modifier == _selectionModifier)
+        {
+            CaptureSelectionAndShow(mainWindow);
+        }
+        else if (_screenshotModifier == modifier)
+        {
+            CaptureScreenshotAndShow(mainWindow);
+        }
+    }
     private Forms.NotifyIcon? _trayIcon;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -194,8 +222,7 @@ public partial class App : Application
         CreateTrayIcon(mainWindow);
 
         _doubleTapHook = new GlobalDoubleTapHook();
-        _doubleTapHook.DoubleShiftPressed += (_, _) => CaptureSelectionAndShow(mainWindow);
-        _doubleTapHook.DoubleCtrlPressed += (_, _) => CaptureScreenshotAndShow(mainWindow);
+        _doubleTapHook.DoubleTap += (_, modifier) => OnDoubleTap(mainWindow, modifier);
         InstallHotkeyWithFeedback();
 
         StartHotkeyWatchdog();

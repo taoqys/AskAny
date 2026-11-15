@@ -25,6 +25,21 @@ internal static class ConfigFixture
         }
     }
 
+    // 直接拿一个 AppConfig 对象走完整归一化：顺带验证该对象能被正确序列化。
+    public static async Task<AppConfig> NormalizeAsync(AppConfig config)
+    {
+        var path = WriteTemp(JsonSerializer.Serialize(config, JsonDefaults.Options));
+
+        try
+        {
+            return await new ConfigService(path).LoadAsync();
+        }
+        finally
+        {
+            TryDelete(path);
+        }
+    }
+
     // 把第一次的结果序列化再归一化一次，用来验证迁移是幂等的。
     public static async Task<AppConfig> NormalizeTwiceAsync(string json)
     {

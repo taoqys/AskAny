@@ -55,9 +55,11 @@ public partial class MainWindow : Window
     // 所以不能在 catch 过滤器里读它，只能提前把结论记下来。
     private bool _lastRequestCancelledByUser;
 
-    // 多轮上下文上限：约 6 轮问答，且总字数不超过 24k。
+    // 多轮上下文上限：约 6 轮问答。字数预算按模型真实上下文长度动态计算（见下）。
     private const int MaxConversationTurns = 12;
-    private const int MaxConversationCharacters = 24_000;
+    private const int DefaultConversationCharacters = 24_000;
+    private const int MinimumConversationCharacters = 4_000;
+    private const int MaximumConversationCharacters = 120_000;
 
     public MainWindow(
         ConfigService configService,
@@ -123,6 +125,12 @@ public partial class MainWindow : Window
         RefreshModelChoices();
 
         Topmost = _config.KeepWindowOnTop;
+
+        // 全局手势的按键映射来自配置，配置一变就让 App 重新套用（不必重启）。
+        if (Application.Current is App app)
+        {
+            app.ApplyHotkeyConfig(_config);
+        }
     }
 
     public void ShowFromHotkey(string? selectedText = null)
@@ -955,8 +963,9 @@ public partial class MainWindow : Window
             _conversation.RemoveAt(0);
         }
 
+        var budget = CurrentConversationCharacterBudget();
         while (_conversation.Count > 2 &&
-               _conversation.Sum(turn => turn.Content.Length) > MaxConversationCharacters)
+               _conversation.Sum(turn => turn.Content.Length) > budget)
         {
             _conversation.RemoveAt(0);
         }
@@ -965,6 +974,20 @@ public partial class MainWindow : Window
         {
             _conversation.RemoveAt(0);
         }
+    }
+
+    // 按当前模型的真实上下文长度决定历史预算：小上下文模型别撑爆，大上下文模型别白白浪费。
+    // 字符数按「1 字符 ≈ 1 token」保守估算（中文实际略低于 1），只把 40% 上下文留给历史。
+    private int CurrentConversationCharacterBudget()
+    {
+        var capability = ModelCapabilities.Infer(_currentProvider?.SelectedModel ?? string.Empty);
+
+        if (capability.ContextTokens is not { } tokens || tokens <= 0)
+        {
+            return DefaultConversationCharacters;
+        }
+
+        return Math.Clamp((int)(tokens * 0.4), MinimumConversationCharacters, MaximumConversationCharacters);
     }
 
     private void SetOutputMarkdown(string markdown, string? reasoning)
@@ -1367,9 +1390,9 @@ public partial class MainWindow : Window
         _isRefreshingModels = true;
         try
         {
+            // 只列「已启用」的模型：设置里没勾选的模型不出现在主界面。
             _modelChoices = _config.Providers
-                .SelectMany(provider => provider.Models
-                    .Where(model => !string.IsNullOrWhiteSpace(model))
+                .SelectMany(provider => provider.EffectiveModels()
                     .Select(model => new ModelChoice(provider, model)))
                 .ToList();
 

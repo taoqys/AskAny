@@ -32,6 +32,15 @@ public enum ApiProtocol
     Responses
 }
 
+// 全局手势用的修饰键。双击同一个修饰键触发对应动作。
+// 只支持修饰键：它们不会被别的程序占用，钩子只旁听不拦截。
+public enum HotkeyModifier
+{
+    Shift,
+    Control,
+    Alt
+}
+
 public sealed class FunctionOption
 {
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
@@ -94,6 +103,10 @@ public sealed class ProviderConfig
     public string ApiKeyProtected { get; set; } = string.Empty;
     public List<string> Models { get; set; } = [];
     public string SelectedModel { get; set; } = string.Empty;
+
+    // 用户从获取到的模型列表里勾选出来的「启用」集合 —— 主界面模型 tab 只显示这些。
+    // 为空表示「全部启用」（老配置的语义），避免升级后模型消失。
+    public List<string> EnabledModels { get; set; } = [];
     public List<string> VisionModels { get; set; } = [];
     public bool VisionModelsConfigured { get; set; }
     public bool SupportsReasoningControl { get; set; } = true;
@@ -110,6 +123,7 @@ public sealed class ProviderConfig
             ApiKeyProtected = ApiKeyProtected,
             Models = [.. Models],
             SelectedModel = SelectedModel,
+            EnabledModels = [.. EnabledModels],
             VisionModels = [.. VisionModels],
             VisionModelsConfigured = VisionModelsConfigured,
             SupportsReasoningControl = SupportsReasoningControl,
@@ -129,6 +143,25 @@ public sealed class ProviderConfig
             pattern.Equals(model, StringComparison.OrdinalIgnoreCase) ||
             (pattern.EndsWith('*') &&
              model.StartsWith(pattern[..^1], StringComparison.OrdinalIgnoreCase)));
+    }
+
+    // 主界面真正可选的模型：优先「启用」集合，没勾选过就退回完整列表。
+    public IReadOnlyList<string> EffectiveModels()
+    {
+        var enabled = (EnabledModels ?? [])
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (enabled.Count > 0)
+        {
+            return enabled;
+        }
+
+        return (Models ?? [])
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }
 
@@ -150,6 +183,12 @@ public sealed class AppConfig
     public bool AutoFillSelectedText { get; set; } = true;
     public bool StartWithWindows { get; set; }
     public bool ScreenshotHotkeyEnabled { get; set; } = true;
+
+    // 全局手势可配置：用哪个修饰键双击、间隔多长。
+    // 默认仍是「双击 Shift 取词 + 双击 Ctrl 截图」，与老版本一致。
+    public HotkeyModifier SelectionHotkeyModifier { get; set; } = HotkeyModifier.Shift;
+    public HotkeyModifier ScreenshotHotkeyModifier { get; set; } = HotkeyModifier.Control;
+    public int HotkeyDoubleTapIntervalMs { get; set; } = 400;
 
     // Legacy fields are retained so existing installations migrate cleanly.
     public string OpenAiBaseUri { get; set; } = "https://api.openai.com/v1";
@@ -173,6 +212,9 @@ public sealed class AppConfig
             AutoFillSelectedText = AutoFillSelectedText,
             StartWithWindows = StartWithWindows,
             ScreenshotHotkeyEnabled = ScreenshotHotkeyEnabled,
+            SelectionHotkeyModifier = SelectionHotkeyModifier,
+            ScreenshotHotkeyModifier = ScreenshotHotkeyModifier,
+            HotkeyDoubleTapIntervalMs = HotkeyDoubleTapIntervalMs,
             OpenAiBaseUri = OpenAiBaseUri,
             Model = Model,
             OpenAiApiKeyProtected = OpenAiApiKeyProtected
@@ -194,6 +236,11 @@ public sealed class HistoryEntry
     public string Reasoning { get; set; } = string.Empty;
     public int ImageCount { get; set; }
     public int SourceCount { get; set; }
+
+    // 话题：一次连续追问算一个话题。历史按话题分组，并可从历史「继续该话题」恢复上下文。
+    // 空 TopicId 表示老记录（升级前写入的历史）。
+    public string TopicId { get; set; } = string.Empty;
+    public string TopicTitle { get; set; } = string.Empty;
 
     [JsonIgnore]
     public string DisplayMeta =>

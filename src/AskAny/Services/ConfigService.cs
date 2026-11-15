@@ -62,11 +62,35 @@ public sealed class ConfigService
         File.Move(temporaryPath, _configPath, true);
     }
 
+    // 启用集合与模型列表保持一致的唯一入口：丢掉不存在的模型，
+    // 全选时归一化成空列表（「全部启用」），保证老配置和新配置语义统一。
+    private static List<string> SanitizeEnabledModels(ProviderConfig provider)
+    {
+        var models = (provider.Models ?? [])
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var enabled = (provider.EnabledModels ?? [])
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Where(model => models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return enabled.Count == 0 || enabled.Count == models.Count ? [] : enabled;
+    }
+
     private static AppConfig Normalize(AppConfig config)
     {
         config.Functions = NormalizeFunctions(config.Functions);
         config.Functions = ConsolidateFunctions(config, config.Functions);
         config.Functions = MergeAnswerAndExplain(config, config.Functions);
+
+        // 双击间隔夹到钩子允许的范围内：配置被手改成 0 或极大值时不该让手势失灵。
+        config.HotkeyDoubleTapIntervalMs = Math.Clamp(config.HotkeyDoubleTapIntervalMs, 120, 550);
+
+        // 启用集合只保留当前模型列表里还存在的项；全选等价于空（表示「全部启用」）。
+        // 必须放在下面的模型列表规整之后，否则会拿规整前的列表做判断。
 
         if (config.Providers.Count == 0)
         {
@@ -130,6 +154,19 @@ public sealed class ConfigService
                     .Select(model => model.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+            }
+        }
+
+        foreach (var provider in config.Providers)
+        {
+            provider.EnabledModels = SanitizeEnabledModels(provider);
+
+            // 选中的模型必须落在启用集合里，否则主界面会指向一个不存在的 tab。
+            var effective = provider.EffectiveModels();
+            if (effective.Count > 0 &&
+                !effective.Contains(provider.SelectedModel, StringComparer.OrdinalIgnoreCase))
+            {
+                provider.SelectedModel = effective[0];
             }
         }
 

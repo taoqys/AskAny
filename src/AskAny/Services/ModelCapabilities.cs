@@ -6,12 +6,14 @@ namespace AskAny.Services;
 
 // 一个模型的「能力」——目前是 AskAny 会真正用到的几项。
 // CanDisableReasoning 为 null 表示未知（此时按「可以关闭」处理，保持原有行为）。
+// ContextTokens 为 null 表示未知（此时按默认上限处理）。
 public readonly record struct ModelCapability(
     bool SupportsVision,
     bool SupportsReasoning,
-    bool? CanDisableReasoning)
+    bool? CanDisableReasoning,
+    int? ContextTokens)
 {
-    public static readonly ModelCapability Unknown = new(false, false, null);
+    public static readonly ModelCapability Unknown = new(false, false, null, null);
 
     public bool IsKnown => SupportsVision || SupportsReasoning;
 }
@@ -70,6 +72,7 @@ public static class ModelCapabilities
         return new ModelCapability(
             MatchesAny(lower, VisionMarkers),
             MatchesAny(lower, ReasoningMarkers) || IsReasoningFamily(lower),
+            null,
             null);
     }
 
@@ -131,7 +134,17 @@ public static class ModelCapabilities
                     };
                 }
 
-                result[property.Name] = new ModelCapability(vision, reasoning, canDisable);
+                // c: 上下文 token 上限，缺失表示未知
+                int? contextTokens = null;
+                if (property.Value.TryGetProperty("c", out var contextElement) &&
+                    contextElement.ValueKind == JsonValueKind.Number &&
+                    contextElement.TryGetInt32(out var tokens) &&
+                    tokens > 0)
+                {
+                    contextTokens = tokens;
+                }
+
+                result[property.Name] = new ModelCapability(vision, reasoning, canDisable, contextTokens);
             }
         }
         catch (JsonException exception)
