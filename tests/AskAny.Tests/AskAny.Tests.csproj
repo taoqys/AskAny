@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- 被测项目是 WPF 应用，测试工程也需要 WPF 才能引用它 -->
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <!-- 测试工程开着隐式 using：被测项目关掉了它，但测试里漏 using 只会白烧一轮 CI -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>AskAny.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AskAny\AskAny.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="AskAny"
         Width="660"
-        Height="470"
+        Height="496"
         MinWidth="560"
-        MinHeight="420"
+        MinHeight="446"
         WindowStyle="None"
         ResizeMode="CanResizeWithGrip"
         AllowsTransparency="True"
@@ -36,17 +36,18 @@
                 <RowDefinition x:Name="PromptRowDefinition" Height="Auto" />
                 <RowDefinition Height="1" />
                 <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="48" />
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0"
                   MinHeight="48"
                   Margin="12,6,6,6"
-                  MouseLeftButtonDown="Header_MouseLeftButtonDown"
-                  AllowDrop="True"
-                  DragOver="Input_DragOver"
-                  Drop="Input_Drop">
-                <Grid.RowDefinitions>
+                      MouseLeftButtonDown="Header_MouseLeftButtonDown"
+                      AllowDrop="True"
+                      DragOver="Input_DragOver"
+                      Drop="Input_Drop">
+                    <Grid.RowDefinitions>
                     <RowDefinition Height="44" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -56,6 +57,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <!-- 显式指定 LineHeight + BlockLineHeight + Ideal 排版，与功能行图标一致，
+                     让字形位置可预测；否则 Segoe MDL2 按自身行框排布，实测偏高 3.5px。 -->
                 <TextBlock Width="24"
                            Height="24"
                            HorizontalAlignment="Center"
@@ -63,8 +66,18 @@
                            FontFamily="Segoe MDL2 Assets"
                            FontSize="16"
                            Foreground="#6E737C"
+                           LineHeight="24"
+                           LineStackingStrategy="BlockLineHeight"
                            Text="&#xE721;"
-                           TextAlignment="Center" />
+                           TextAlignment="Center"
+                           TextOptions.TextFormattingMode="Ideal">
+                    <!-- BlockLineHeight 会把字形压到行框底部，按截图像素测量回正。
+                         取整数 -5 而不是 -4.5：既正好落在单元格中心，又避免半像素偏移带来的模糊。
+                         功能行图标用的是同一套偏移思路。 -->
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform Y="-5" />
+                    </TextBlock.RenderTransform>
+                </TextBlock>
 
                 <Grid Grid.Column="1" Margin="6,0,4,0">
                     <Border x:Name="PromptEditorBorder"
@@ -76,6 +89,8 @@
                             Drop="Input_Drop">
                         <Grid>
                             <TextBox x:Name="PromptBox"
+                                     AutomationProperties.AutomationId="PromptBox"
+                                     AutomationProperties.Name="问题输入框"
                                      MinHeight="44"
                                      Padding="3,5,3,4"
                                      VerticalContentAlignment="Center"
@@ -112,26 +127,14 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Center">
                     <Button x:Name="AttachmentButton"
+                            AutomationProperties.AutomationId="AttachmentButton"
+                            AutomationProperties.Name="添加图片"
                             Style="{StaticResource IconButton}"
                             ToolTip="添加图片（双击 Ctrl 区域截图 · Ctrl+V 粘贴 · 拖入图片）"
                             Click="AttachmentButton_Click">
                         <TextBlock FontFamily="Segoe MDL2 Assets"
                                    FontSize="16"
                                    Text="&#xE8B9;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            ToolTip="设置（F1）"
-                            Click="SettingsButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="16"
-                                   Text="&#xE713;" />
-                    </Button>
-                    <Button Style="{StaticResource IconButton}"
-                            ToolTip="隐藏窗口（Esc）"
-                            Click="HideButton_Click">
-                        <TextBlock FontFamily="Segoe MDL2 Assets"
-                                   FontSize="15"
-                                   Text="&#xE711;" />
                     </Button>
                 </StackPanel>
 
@@ -197,17 +200,26 @@
             <Border Grid.Row="1" Background="{StaticResource LineBrush}" />
 
             <Grid Grid.Row="2">
+                <StackPanel x:Name="HomePanel"
+                            Margin="12,8,12,8"
+                            VerticalAlignment="Top">
                 <ListBox x:Name="FunctionList"
-                         Margin="10,8,10,6"
+                         Margin="0"
+                         Padding="0"
                          BorderThickness="0"
                          Background="Transparent"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                          ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         AutomationProperties.AutomationId="FunctionList"
+                         AutomationProperties.Name="功能列表"
                          SelectionChanged="FunctionList_SelectionChanged">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                             <Setter Property="Focusable" Value="False" />
+                            <!-- 1A：整行单击直接执行，兑现行尾 ▶ 的视觉承诺。 -->
+                            <EventSetter Event="MouseLeftButtonUp"
+                                         Handler="FunctionItem_MouseLeftButtonUp" />
                             <Setter Property="Template">
                                 <Setter.Value>
                                     <ControlTemplate TargetType="ListBoxItem">
@@ -233,7 +245,7 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Grid MinHeight="36">
+                            <Grid MinHeight="46">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="38" />
                                     <ColumnDefinition Width="*" />
@@ -268,24 +280,72 @@
                                         </TextBlock>
                                     </Grid>
                                 </Border>
-                                <TextBlock Grid.Column="1"
-                                           Margin="8,0,8,0"
-                                           VerticalAlignment="Center"
-                                           FontSize="14"
-                                           FontWeight="SemiBold"
-                                           Foreground="{StaticResource InkBrush}"
-                                           Text="{Binding Name}" />
-                                <TextBlock Grid.Column="2"
+                                <StackPanel Grid.Column="1"
+                                            Margin="8,0,8,0"
+                                            VerticalAlignment="Center">
+                                    <TextBlock FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource InkBrush}"
+                                               Text="{Binding Name}" />
+                                    <TextBlock Margin="0,2,0,0"
+                                               FontSize="11"
+                                               Foreground="{StaticResource MutedBrush}"
+                                               Text="{Binding Description}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock x:Name="RowRunHint"
+                                           Grid.Column="2"
                                            Margin="8,0,4,0"
                                            VerticalAlignment="Center"
                                            FontFamily="Segoe MDL2 Assets"
                                            FontSize="13"
                                            Foreground="#A4A5AA"
+                                           Opacity="0"
                                            Text="&#xE724;" />
                             </Grid>
+                            <DataTemplate.Triggers>
+                                <!-- 箭头只在鼠标悬停时淡入：静态时 6 行都挂一个箭头是纯噪点，
+                                     而它现在是真的"点这里就执行"，悬停出现才有意义。 -->
+                                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                             Value="True">
+                                    <Setter TargetName="RowRunHint" Property="Opacity" Value="1" />
+                                </DataTrigger>
+                            </DataTemplate.Triggers>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+
+                <!-- 主页信息区：把只在底栏小字里出现的能力与快捷键讲清楚，
+                     同时让主页不再显得空旷。回答页会整体隐藏。 -->
+                <StackPanel x:Name="HomeExtras" Margin="0,14,0,0">
+                    <Border Padding="12,10"
+                            Background="#F7F7F9"
+                            CornerRadius="7">
+                        <StackPanel>
+                            <TextBlock FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       Text="快捷键" />
+                            <TextBlock Margin="0,5,0,0"
+                                       FontSize="11.5"
+                                       Foreground="{StaticResource InkBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="Tab / ⇧Tab 换模型　·　Ctrl+D 双模型对比　·　Ctrl+N 新话题" />
+                            <TextBlock Margin="0,3,0,0"
+                                       FontSize="11.5"
+                                       Foreground="{StaticResource MutedBrush}"
+                                       TextWrapping="Wrap"
+                                       Text="PgUp / PgDn 切思考　·　Alt+1/2/3 切检索来源" />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="ModelCapabilityText"
+                               Margin="12,10,12,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               TextWrapping="Wrap"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                </StackPanel>
 
                 <Grid x:Name="ResponsePanel"
                       Margin="12,8"
@@ -296,7 +356,7 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                    <Grid Grid.Row="0" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -345,21 +405,27 @@
                         </StackPanel>
                     </Grid>
 
-                    <Expander x:Name="ThinkingExpander"
-                              Grid.Row="1"
-                              Margin="0,0,0,6"
-                              IsExpanded="False"
-                              Visibility="Collapsed"
-                              Header="思考过程">
-                        <Border Margin="0,4,0,0"
+                    <!-- 推理过程只留一行提示，点开才展开：默认不占高度，
+                         也不再让一个横跨两栏的展开器干扰对比布局。 -->
+                    <StackPanel Grid.Row="1" Margin="0,0,0,4">
+                        <Button x:Name="ReasoningChip"
+                                HorizontalAlignment="Left"
+                                Style="{StaticResource SourceChip}"
+                                ToolTip="展开 / 收起思考过程"
+                                Visibility="Collapsed"
+                                Click="ReasoningChip_Click" />
+                        <Border x:Name="ReasoningBox"
+                                Margin="0,4,0,0"
                                 Padding="10,7"
+                                MaxHeight="150"
                                 Background="#F8F8FA"
                                 BorderBrush="{StaticResource LineBrush}"
                                 BorderThickness="1"
-                                CornerRadius="7">
+                                CornerRadius="7"
+                                Visibility="Collapsed">
                             <RichTextBox x:Name="ThinkingRichText"
-                                         MinHeight="52"
-                                         MaxHeight="150"
+                                         MinHeight="40"
+                                         MaxHeight="130"
                                          Padding="0"
                                          IsReadOnly="True"
                                          IsDocumentEnabled="True"
@@ -367,41 +433,188 @@
                                          BorderThickness="0"
                                          VerticalScrollBarVisibility="Auto" />
                         </Border>
-                    </Expander>
+                    </StackPanel>
 
-                    <Border Grid.Row="2"
-                            Background="#FAFAFB"
-                            BorderBrush="{StaticResource LineBrush}"
-                            BorderThickness="1"
-                            CornerRadius="7">
-                        <Grid>
-                            <RichTextBox x:Name="OutputRichText"
-                                         Margin="12"
-                                         Padding="0"
-                                         IsReadOnly="True"
-                                         IsDocumentEnabled="True"
-                                         Background="Transparent"
-                                         BorderThickness="0"
-                                         VerticalScrollBarVisibility="Auto"
-                                         HorizontalScrollBarVisibility="Disabled" />
-                            <ProgressBar x:Name="BusyProgress"
-                                         Height="3"
-                                         Margin="12,0,12,8"
-                                         VerticalAlignment="Bottom"
-                                         Background="Transparent"
-                                         Foreground="{StaticResource AccentBrush}"
-                                         IsIndeterminate="True"
-                                         Visibility="Collapsed" />
-                        </Grid>
-                    </Border>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition x:Name="CompareSplitterColumn" Width="0" />
+                            <ColumnDefinition x:Name="CompareColumn" Width="0" />
+                        </Grid.ColumnDefinitions>
+
+                        <DockPanel Grid.Column="0">
+                            <!-- 对比模式下给左栏一个模型标签，否则不知道哪边是哪个模型。 -->
+                            <TextBlock x:Name="PrimaryModelText"
+                                       DockPanel.Dock="Top"
+                                       Margin="0,0,0,3"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       Visibility="Collapsed" />
+                            <!-- 与右侧「模型名 + 耗时」两行保持一致，否则两栏的正文框顶边不齐。 -->
+                            <Border Background="#FAFAFB"
+                                    BorderBrush="{StaticResource LineBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                <Grid>
+                                    <RichTextBox x:Name="OutputRichText"
+                                                 AutomationProperties.AutomationId="OutputRichText"
+                                                 AutomationProperties.Name="回答内容"
+                                                 Margin="12"
+                                                 Padding="0"
+                                                 IsReadOnly="True"
+                                                 IsDocumentEnabled="True"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 HorizontalScrollBarVisibility="Disabled" />
+                                    <ProgressBar x:Name="BusyProgress"
+                                                 Height="3"
+                                                 Margin="12,0,12,8"
+                                                 VerticalAlignment="Bottom"
+                                                 Background="Transparent"
+                                                 Foreground="{StaticResource AccentBrush}"
+                                                 IsIndeterminate="True"
+                                                 Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </DockPanel>
+
+                        <DockPanel x:Name="ComparePane"
+                                   Grid.Column="2"
+                                   Visibility="Collapsed">
+                            <!-- 右栏模型名由底栏的选择框决定，这里只显示当前值。 -->
+                            <TextBlock x:Name="CompareModelText"
+                                       DockPanel.Dock="Top"
+                                       Margin="0,0,0,3"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <Border Background="#FAFAFB"
+                                    BorderBrush="{StaticResource LineBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                <Grid>
+                                    <RichTextBox x:Name="CompareRichText"
+                                                 AutomationProperties.AutomationId="CompareRichText"
+                                                 AutomationProperties.Name="对比回答内容"
+                                                 Margin="12"
+                                                 Padding="0"
+                                                 IsReadOnly="True"
+                                                 IsDocumentEnabled="True"
+                                                 Background="Transparent"
+                                                 BorderThickness="0"
+                                                 VerticalScrollBarVisibility="Auto"
+                                                 HorizontalScrollBarVisibility="Disabled" />
+                                    <ProgressBar x:Name="CompareBusyProgress"
+                                                 Height="3"
+                                                 Margin="12,0,12,8"
+                                                 VerticalAlignment="Bottom"
+                                                 Background="Transparent"
+                                                 Foreground="{StaticResource AccentBrush}"
+                                                 IsIndeterminate="True"
+                                                 Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </DockPanel>
+                    </Grid>
                 </Grid>
             </Grid>
 
-            <Grid Grid.Row="3" Margin="10,0,8,0">
+            <!-- 模式条：思考 OFF/ON 与检索来源都放这一行，PgUp/PgDn 切换当前功能对应的那一组。
+                 对比开关也放在这里，和「模式」类操作放在一起。 -->
+            <StackPanel x:Name="ModeStrip"
+                        Grid.Row="3"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Margin="14,0,14,8">
+                <TextBlock VerticalAlignment="Center"
+                           Margin="0,0,7,0"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="思考" />
+                <Button x:Name="ThinkingOffChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="false"
+                        ToolTip="关闭思考：能关的模型发 none，始终思考的模型退到 low（PgUp/PgDn）"
+                        Content="OFF"
+                        Click="ThinkingChip_Click" />
+                <Button x:Name="ThinkingOnChip"
+                        Style="{StaticResource SourceChip}"
+                        Tag="true"
+                        ToolTip="开启思考：按设置里的强度请求推理（PgUp/PgDn）"
+                        Content="ON"
+                        Click="ThinkingChip_Click" />
+
+                <Border Width="1"
+                        Height="14"
+                        Margin="10,0,10,0"
+                        VerticalAlignment="Center"
+                        Background="{StaticResource LineBrush}"
+                        Visibility="{Binding Visibility, ElementName=SourceStrip}" />
+
+                <StackPanel x:Name="SourceStrip"
+                            Orientation="Horizontal"
+                            Visibility="Collapsed">
+                    <TextBlock VerticalAlignment="Center"
+                               Margin="0,0,7,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="来源" />
+                    <Button x:Name="SourceGeneralChip"
+                            Style="{StaticResource SourceChip}"
+                            Tag="TavilyGeneral"
+                            ToolTip="Tavily 全网搜索（Alt+1）"
+                            Content="全网"
+                            Click="SourceChip_Click" />
+                    <Button x:Name="SourceNewsChip"
+                            Style="{StaticResource SourceChip}"
+                            Tag="TavilyNews"
+                            ToolTip="Tavily 新闻：偏向主流媒体的实时报道（Alt+2）"
+                            Content="新闻"
+                            Click="SourceChip_Click" />
+                    <Button x:Name="SourceZhihuChip"
+                            Style="{StaticResource SourceChip}"
+                            Tag="Zhihu"
+                            ToolTip="知乎站内检索，需要 Access Secret（Alt+3）"
+                            Content="知乎"
+                            Click="SourceChip_Click" />
+                </StackPanel>
+
+                <ToggleButton x:Name="CompareModeButton"
+                              Margin="12,0,0,0"
+                              Padding="8,1"
+                              VerticalAlignment="Center"
+                              Background="Transparent"
+                              BorderBrush="{StaticResource LineBrush}"
+                              BorderThickness="1"
+                              Cursor="Hand"
+                              FontSize="11"
+                              Foreground="{StaticResource MutedBrush}"
+                              ToolTip="双模型对比：同一个问题同时问两个模型，左右分屏（Ctrl+D）"
+                              Checked="CompareModeButton_Toggled"
+                              Unchecked="CompareModeButton_Toggled">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock FontFamily="Segoe MDL2 Assets"
+                                   FontSize="11"
+                                   Text="&#xE8AB;" />
+                        <TextBlock Margin="4,0,0,0" Text="对比" />
+                    </StackPanel>
+                </ToggleButton>
+
+                <TextBlock x:Name="ModeHintText"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedBrush}"
+                           Text="PgUp/PgDn 切思考" />
+            </StackPanel>
+            <Grid Grid.Row="4" Margin="10,0,8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -421,11 +634,12 @@
                                    Foreground="{StaticResource MutedBrush}"
                                    Text="&#xE72B;" />
                     </Border>
-                    <TextBlock Margin="6,0,10,0"
+                    <TextBlock x:Name="ShortcutHintText"
+                               Margin="6,0,10,0"
                                VerticalAlignment="Center"
                                FontSize="11"
                                Foreground="{StaticResource MutedBrush}"
-                               Text="按 ESC 关闭" />
+                               Text="ESC 关闭 · Tab 切模型" />
                     <TextBlock x:Name="StatusText"
                                VerticalAlignment="Center"
                                FontSize="11"
@@ -433,28 +647,49 @@
                                TextTrimming="CharacterEllipsis" />
                 </StackPanel>
 
-                <TextBlock Grid.Column="1"
-                           Margin="0,0,5,0"
-                           VerticalAlignment="Center"
-                           FontSize="11"
-                           Foreground="{StaticResource MutedBrush}"
-                           Text="模型" />
-                <ComboBox x:Name="ModelComboBox"
-                          Grid.Column="2"
-                          Width="200"
-                          Height="30"
-                          Margin="0,0,4,0"
-                          VerticalAlignment="Center"
-                          Style="{StaticResource ComboField}"
-                          DisplayMemberPath="DisplayName"
-                          IsEditable="True"
-                          IsTextSearchEnabled="True"
-                          SelectionChanged="ModelComboBox_SelectionChanged"
-                          LostKeyboardFocus="ModelComboBox_LostKeyboardFocus" />
+                <!-- 模型选择框：单栏时只有一个，对比模式下并排两个（左/右）。
+                     键盘：Tab 切左模型、` 切右模型。 -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <TextBlock x:Name="LeftModelLabel"
+                               Margin="0,0,5,0"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="模型" />
+                    <ComboBox x:Name="LeftModelComboBox"
+                              AutomationProperties.AutomationId="LeftModelComboBox"
+                              AutomationProperties.Name="模型选择（左）"
+                              Width="140"
+                              Height="28"
+                              Style="{StaticResource ComboField}"
+                              DisplayMemberPath="Model"
+                              IsTextSearchEnabled="False"
+                              SelectionChanged="LeftModelComboBox_SelectionChanged" />
+                    <TextBlock x:Name="CompareArrowText"
+                               Margin="6,0,6,0"
+                               VerticalAlignment="Center"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedBrush}"
+                               Text="⇄"
+                               Visibility="Collapsed" />
+                    <ComboBox x:Name="RightModelComboBox"
+                              AutomationProperties.AutomationId="RightModelComboBox"
+                              AutomationProperties.Name="对比模型选择（右）"
+                              Width="140"
+                              Height="28"
+                              Style="{StaticResource ComboField}"
+                              DisplayMemberPath="Model"
+                              IsTextSearchEnabled="False"
+                              Visibility="Collapsed"
+                              SelectionChanged="RightModelComboBox_SelectionChanged" />
+                </StackPanel>
 
-                <Button Grid.Column="3"
+                <Button Grid.Column="2"
                         Style="{StaticResource IconButton}"
                         AutomationProperties.AutomationId="HistoryButton"
+                        AutomationProperties.Name="历史记录"
                         ToolTip="历史记录"
                         Click="HistoryButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
@@ -462,28 +697,16 @@
                                Text="&#xE81C;" />
                 </Button>
 
-                <Button x:Name="PinButton"
-                        Grid.Column="4"
+                <Button Grid.Column="3"
                         Style="{StaticResource IconButton}"
-                        ToolTip="取消窗口置顶"
-                        Click="PinButton_Click">
-                    <TextBlock x:Name="PinGlyph"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontFamily="Segoe MDL2 Assets"
-                               FontSize="16"
-                               Text="&#xE77A;" />
-                </Button>
-
-                <Button Grid.Column="5"
-                        Style="{StaticResource IconButton}"
-                        ToolTip="退出 AskAny"
-                        Click="ExitButton_Click">
+                        AutomationProperties.AutomationId="SettingsButton"
+                        AutomationProperties.Name="设置"
+                        ToolTip="设置（F1）"
+                        Click="SettingsButton_Click">
                     <TextBlock FontFamily="Segoe MDL2 Assets"
-                               FontSize="14"
-                               Text="&#xE7E8;" />
+                               FontSize="16"
+                               Text="&#xE713;" />
                 </Button>
-            </Grid>
-        </Grid>
+            </Grid>        </Grid>
     </Border>
 </Window>

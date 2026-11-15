@@ -9,7 +9,19 @@ public sealed class ConfigService
     private readonly string _configPath;
 
     public ConfigService()
+        : this(null)
     {
+    }
+
+    // 传入路径时从该文件读写，用于 --dump-config 这类诊断；默认仍是 %APPDATA%\AskAny\config.json。
+    public ConfigService(string? configPath)
+    {
+        if (!string.IsNullOrWhiteSpace(configPath))
+        {
+            _configPath = configPath;
+            return;
+        }
+
         var directory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "AskAny");
@@ -50,9 +62,36 @@ public sealed class ConfigService
         File.Move(temporaryPath, _configPath, true);
     }
 
+    // 启用集合与模型列表保持一致的唯一入口：丢掉不存在的模型，
+    // 全选时归一化成空列表（「全部启用」），保证老配置和新配置语义统一。
+    private static List<string> SanitizeEnabledModels(ProviderConfig provider)
+    {
+        var models = (provider.Models ?? [])
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var enabled = (provider.EnabledModels ?? [])
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Where(model => models.Contains(model, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return enabled.Count == 0 || enabled.Count == models.Count ? [] : enabled;
+    }
+
     private static AppConfig Normalize(AppConfig config)
     {
         config.Functions = NormalizeFunctions(config.Functions);
+        config.Functions = ConsolidateFunctions(config, config.Functions);
+        config.Functions = MergeAnswerAndExplain(config, config.Functions);
+        config.Functions = MergeThinkingIntoAnswer(config, config.Functions);
+
+        // 双击间隔夹到钩子允许的范围内：配置被手改成 0 或极大值时不该让手势失灵。
+        config.HotkeyDoubleTapIntervalMs = Math.Clamp(config.HotkeyDoubleTapIntervalMs, 120, 550);
+
+        // 启用集合只保留当前模型列表里还存在的项；全选等价于空（表示「全部启用」）。
+        // 必须放在下面的模型列表规整之后，否则会拿规整前的列表做判断。
 
         if (config.Providers.Count == 0)
         {
@@ -119,10 +158,217 @@ public sealed class ConfigService
             }
         }
 
+        foreach (var provider in config.Providers)
+        {
+            provider.EnabledModels = SanitizeEnabledModels(provider);
+
+            // 选中的模型必须落在启用集合里，否则主界面会指向一个不存在的 tab。
+            var effective = provider.EffectiveModels();
+            if (effective.Count > 0 &&
+                !effective.Contains(provider.SelectedModel, StringComparer.OrdinalIgnoreCase))
+            {
+                provider.SelectedModel = effective[0];
+            }
+        }
+
         var selected = config.Providers.FirstOrDefault(
             provider => provider.Id.Equals(config.SelectedProviderId, StringComparison.OrdinalIgnoreCase));
         config.SelectedProviderId = selected?.Id ?? config.Providers[0].Id;
         return config;
+    }
+
+    // 把「深度思考」并进「回答」：思考改成面板上的 OFF/ON 开关，不再是一个功能项。
+    // 只做一次；做过之后用户自己再加的模式都不再被改动。
+    private static List<FunctionOption> MergeThinkingIntoAnswer(
+        AppConfig config,
+        List<FunctionOption> functions)
+    {
+        if (config.ThinkingMergedIntoAnswer)
+        {
+            return functions;
+        }
+
+        config.ThinkingMergedIntoAnswer = true;
+
+        var thinkItems = functions
+            .Where(function => function.Mode == WorkflowMode.Think)
+            .ToList();
+
+        if (thinkItems.Count == 0)
+        {
+            return functions;
+        }
+
+        var answer = functions.FirstOrDefault(function => function.Mode == WorkflowMode.Answer);
+
+        if (answer is null)
+        {
+            // 只有思考项：把它改造成「回答」，不丢配置。
+            var single = thinkItems[0];
+            single.Mode = WorkflowMode.Answer;
+            single.Name = "回答";
+
+            foreach (var extra in thinkItems.Skip(1))
+            {
+                functions.Remove(extra);
+            }
+
+            return functions;
+        }
+
+        // 深度思考的提示词若被改过、而「回答」还是默认值，就把用户那段话搬过来，
+        // 别让合并把用户写的东西吞掉。
+        var thinkPrompt = thinkItems[0].SystemPrompt?.Trim() ?? string.Empty;
+        var thinkIsCustom =
+            !string.IsNullOrWhiteSpace(thinkPrompt) &&
+            !thinkPrompt.Equals(
+                FunctionCatalog.GetDefaultSystemPrompt(WorkflowMode.Think),
+                StringComparison.Ordinal);
+
+        var answerPrompt = answer.SystemPrompt?.Trim() ?? string.Empty;
+        var answerIsDefault =
+            string.IsNullOrWhiteSpace(answerPrompt) ||
+            answerPrompt.Equals(
+                FunctionCatalog.GetDefaultSystemPrompt(WorkflowMode.Answer),
+                StringComparison.Ordinal);
+
+        if (thinkIsCustom && answerIsDefault)
+        {
+            answer.SystemPrompt = thinkPrompt;
+        }
+
+        // 内置的那一项统一叫「回答」；用户自己加的同模式功能不动名字。
+        if (answer.Id == "answer")
+        {
+            answer.Name = "回答";
+        }
+
+        foreach (var thinkItem in thinkItems)
+        {
+            functions.Remove(thinkItem);
+        }
+
+        return functions;
+    }
+
+    // 把默认的三个检索项（联网解释 / 新闻追踪 / 知乎搜索）并成一个「联网检索」，只做一次。
+    // 规则刻意保守，避免毁掉用户的自定义提示词：
+    //   · 提示词与所属模式的默认值一致 → 视为「未改动」，可以直接并；
+    //   · 恰好只有一项被改过 → 三项全并，并把那段提示词（连同它的来源）带到「联网检索」上；
+    //   · 两项以上被改过 → 只并未改动的，改过的原样保留。宁可不到 4 项，也不删用户内容。
+    private static List<FunctionOption> ConsolidateFunctions(
+        AppConfig config,
+        List<FunctionOption> functions)
+    {
+        if (config.FunctionSetConsolidated)
+        {
+            return functions;
+        }
+
+        config.FunctionSetConsolidated = true;
+
+        var searchItems = functions
+            .Select((function, index) => (function, index))
+            .Where(item => FunctionCatalog.IsLegacySearchMode(item.function.Mode))
+            .ToList();
+
+        // 没有历史检索项（新装或已并过）→ 不动。
+        if (searchItems.Count == 0)
+        {
+            return functions;
+        }
+
+        var customized = searchItems
+            .Where(item => !HasDefaultPrompt(item.function))
+            .ToList();
+
+        if (customized.Count >= 2)
+        {
+            var untouched = searchItems.Where(item => HasDefaultPrompt(item.function)).ToList();
+            return untouched.Count == 0
+                ? functions
+                : ReplaceWithNetwork(functions, untouched, carriedPrompt: null, carriedSource: null);
+        }
+
+        var single = customized.Count == 1 ? customized[0].function : null;
+        return ReplaceWithNetwork(
+            functions,
+            searchItems,
+            carriedPrompt: single?.SystemPrompt,
+            carriedSource: single is null
+                ? null
+                : FunctionCatalog.SearchBackendForLegacyMode(single.Mode));
+    }
+
+    // 「回答」与「解释」只差一段系统提示词，检索 / 推理 / 温度 / 多轮上下文全部相同，
+    // 因此合并成一项。只在两者同时存在时动手：只剩一个时「合并」本身没有意义，
+    // 不该去改用户留下的那一个。
+    private static List<FunctionOption> MergeAnswerAndExplain(
+        AppConfig config,
+        List<FunctionOption> functions)
+    {
+        if (config.AnswerExplainMerged)
+        {
+            return functions;
+        }
+
+        config.AnswerExplainMerged = true;
+
+        var answer = functions.FirstOrDefault(function => function.Mode == WorkflowMode.Answer);
+        var explain = functions.FirstOrDefault(function => function.Mode == WorkflowMode.Explain);
+        if (answer is null || explain is null)
+        {
+            return functions;
+        }
+
+        // 保留 Answer 那一项（名称 / 图标 / 位置都不动），提示词换成合并后的默认值。
+        answer.SystemPrompt = FunctionCatalog.GetDefaultSystemPrompt(WorkflowMode.Answer);
+        return functions.Where(function => !ReferenceEquals(function, explain)).ToList();
+    }
+
+    private static bool HasDefaultPrompt(FunctionOption function)
+    {
+        return string.Equals(
+            function.SystemPrompt,
+            FunctionCatalog.GetDefaultSystemPrompt(function.Mode),
+            StringComparison.Ordinal);
+    }
+
+    private static List<FunctionOption> ReplaceWithNetwork(
+        List<FunctionOption> functions,
+        List<(FunctionOption function, int index)> merged,
+        string? carriedPrompt,
+        SearchBackend? carriedSource)
+    {
+        var insertAt = merged.Min(item => item.index);
+        var mergedSet = merged.Select(item => item.function).ToHashSet();
+        var network = FunctionCatalog.CreateNetwork();
+
+        if (!string.IsNullOrWhiteSpace(carriedPrompt))
+        {
+            network.SystemPrompt = carriedPrompt;
+        }
+
+        if (carriedSource is { } source)
+        {
+            network.SearchBackend = source;
+        }
+
+        var result = new List<FunctionOption>();
+        for (var index = 0; index < functions.Count; index++)
+        {
+            if (index == insertAt)
+            {
+                result.Add(network);
+            }
+
+            if (!mergedSet.Contains(functions[index]))
+            {
+                result.Add(functions[index]);
+            }
+        }
+
+        return result;
     }
 
     private static List<FunctionOption> NormalizeFunctions(List<FunctionOption>? configuredFunctions)
@@ -154,6 +400,15 @@ public sealed class ConfigService
             function.SystemPrompt = string.IsNullOrWhiteSpace(function.SystemPrompt)
                 ? FunctionCatalog.GetDefaultSystemPrompt(function.Mode)
                 : function.SystemPrompt.Trim();
+
+            // 老配置没有 SearchBackend 字段：由历史检索模式推导，否则这些项的检索能力会静默消失。
+            // 「联网检索」模式不推导 —— 它的来源由用户显式选择，推导会把「不检索」覆盖掉。
+            if (function.SearchBackend == SearchBackend.None &&
+                FunctionCatalog.IsLegacySearchMode(function.Mode))
+            {
+                function.SearchBackend = FunctionCatalog.SearchBackendForLegacyMode(function.Mode);
+            }
+
             functions.Add(function);
         }
 
