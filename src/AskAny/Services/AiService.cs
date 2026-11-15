@@ -36,9 +36,11 @@ public sealed class AiService
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(RequestTimeout);
 
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         using var request = BuildRequest(
             function, prompt, provider, apiKey, search, images, conversation,
-            stream: false, thinkingEnabled);
+            stream: false, thinkingEnabled, includeStreamUsage: false);
 
         using var response = await _httpClient.SendAsync(request, timeout.Token);
         var payload = await response.Content.ReadAsStringAsync(timeout.Token);
@@ -48,10 +50,13 @@ public sealed class AiService
             throw new InvalidOperationException(HttpFailure.Describe(response.StatusCode, payload));
         }
 
+        stopwatch.Stop();
+
+        // 非流式没有「首字」语义，整体耗时即首字时间。
         return provider.Protocol switch
         {
-            ApiProtocol.Responses => ParseResponses(payload),
-            _ => ParseChatCompletions(payload)
+            ApiProtocol.Responses => ParseResponses(payload, stopwatch.Elapsed),
+            _ => ParseChatCompletions(payload, stopwatch.Elapsed)
         };
     }
 
@@ -71,24 +76,72 @@ public sealed class AiService
     {
         Validate(function, prompt, provider);
 
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         using var headerTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         headerTimeout.CancelAfter(StreamingHeaderTimeout);
 
-        using var request = BuildRequest(
-            function, prompt, provider, apiKey, search, images, conversation,
-            stream: true, thinkingEnabled);
+        // stream_options.include_usage 能拿到精确 token 数，但不是所有 OpenAI 兼容实现都认。
+        // 先带着发；如果被 400 拒绝，去掉它重试一次 —— 不能因为要多一个统计字段就让整条请求失败。
+        var response = await SendStreamingAsync(
+            function, prompt, provider, apiKey, search, images, conversation, thinkingEnabled,
+            includeStreamUsage: true, headerTimeout.Token);
 
-        using var response = await _httpClient.SendAsync(
-            request,
-            HttpCompletionOption.ResponseHeadersRead,
-            headerTimeout.Token);
-
-        if (!response.IsSuccessStatusCode)
+        if (response.StatusCode == HttpStatusCode.BadRequest &&
+            provider.Protocol == ApiProtocol.ChatCompletions)
         {
-            var errorPayload = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException(HttpFailure.Describe(response.StatusCode, errorPayload));
+            var rejected = await response.Content.ReadAsStringAsync(cancellationToken);
+            response.Dispose();
+            ErrorLog.Write($"提供商不接受 stream_options，去掉后重试：{HttpFailure.Shorten(rejected, 160)}");
+
+            response = await SendStreamingAsync(
+                function, prompt, provider, apiKey, search, images, conversation, thinkingEnabled,
+                includeStreamUsage: false, headerTimeout.Token);
         }
 
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorPayload = await response.Content.ReadAsStringAsync(cancellationToken);
+                throw new InvalidOperationException(
+                    HttpFailure.Describe(response.StatusCode, errorPayload));
+            }
+
+            return await ReadStreamAsync(
+                response, provider.Protocol, onDelta, stopwatch, cancellationToken);
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendStreamingAsync(
+        FunctionOption function,
+        string prompt,
+        ProviderConfig provider,
+        string apiKey,
+        SearchPacket? search,
+        IReadOnlyList<ImageAttachment>? images,
+        IReadOnlyList<ConversationTurn>? conversation,
+        bool thinkingEnabled,
+        bool includeStreamUsage,
+        CancellationToken cancellationToken)
+    {
+        using var request = BuildRequest(
+            function, prompt, provider, apiKey, search, images, conversation,
+            stream: true, thinkingEnabled, includeStreamUsage);
+
+        return await _httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+    }
+
+    // 读 SSE：边读边回调，同时记录首字时间与用量。
+    private async Task<AiResult> ReadStreamAsync(
+        HttpResponseMessage response,
+        ApiProtocol protocol,
+        Action<string, string> onDelta,
+        System.Diagnostics.Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
         using var bodyTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         bodyTimeout.CancelAfter(StreamingBodyTimeout);
 
@@ -97,6 +150,8 @@ public sealed class AiService
 
         var content = new StringBuilder();
         var reasoning = new StringBuilder();
+        TokenUsage? usage = null;
+        TimeSpan? timeToFirstToken = null;
 
         while (!reader.EndOfStream)
         {
@@ -123,20 +178,31 @@ public sealed class AiService
                 break;
             }
 
-            var (deltaContent, deltaReasoning) = ParseStreamChunk(provider.Protocol, payload);
+            var chunk = ParseStreamChunk(protocol, payload);
 
-            if (!string.IsNullOrEmpty(deltaContent))
+            // 用量分片可能没有正文（chat completions 的最后一个分片就是这种），
+            // 所以不能因为「没有正文」就跳过。
+            if (chunk.Usage is { HasAny: true })
             {
-                content.Append(deltaContent);
-                onDelta(deltaContent, string.Empty);
+                usage = chunk.Usage;
             }
 
-            if (!string.IsNullOrEmpty(deltaReasoning))
+            if (!string.IsNullOrEmpty(chunk.Content))
             {
-                reasoning.Append(deltaReasoning);
-                onDelta(string.Empty, deltaReasoning);
+                timeToFirstToken ??= stopwatch.Elapsed;
+                content.Append(chunk.Content);
+                onDelta(chunk.Content, string.Empty);
+            }
+
+            if (!string.IsNullOrEmpty(chunk.Reasoning))
+            {
+                timeToFirstToken ??= stopwatch.Elapsed;
+                reasoning.Append(chunk.Reasoning);
+                onDelta(string.Empty, chunk.Reasoning);
             }
         }
+
+        stopwatch.Stop();
 
         if (content.Length == 0 && reasoning.Length == 0)
         {
@@ -145,7 +211,9 @@ public sealed class AiService
 
         return new AiResult(
             content.Length == 0 ? "模型没有返回文本内容。" : content.ToString().Trim(),
-            reasoning.Length == 0 ? null : reasoning.ToString().Trim());
+            reasoning.Length == 0 ? null : reasoning.ToString().Trim(),
+            usage,
+            timeToFirstToken ?? stopwatch.Elapsed);
     }
 
     public async Task ValidateAsync(
@@ -187,12 +255,14 @@ public sealed class AiService
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<ConversationTurn>? conversation,
         bool stream,
-        bool thinkingEnabled)
+        bool thinkingEnabled,
+        bool includeStreamUsage)
     {
         var systemPrompt = BuildSystemPrompt(function, search);
         var endpoint = BuildEndpoint(provider.BaseUri, provider.Protocol);
         var requestBody = BuildRequestBody(
-            function, prompt, provider, systemPrompt, images, conversation, stream, thinkingEnabled);
+            function, prompt, provider, systemPrompt, images, conversation, stream,
+            thinkingEnabled, includeStreamUsage);
 
         var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
         if (!string.IsNullOrWhiteSpace(apiKey))
@@ -208,7 +278,12 @@ public sealed class AiService
         return request;
     }
 
-    private static (string? Content, string? Reasoning) ParseStreamChunk(
+    private readonly record struct StreamChunk(
+        string? Content,
+        string? Reasoning,
+        TokenUsage? Usage);
+
+    private static StreamChunk ParseStreamChunk(
         ApiProtocol protocol,
         string json)
     {
@@ -233,15 +308,23 @@ public sealed class AiService
                     throw new InvalidOperationException("流式响应失败：模型或服务端返回了失败事件。");
                 }
 
+                // Responses 的用量在结束事件里：{"type":"response.completed","response":{"usage":{...}}}
+                if (type == "response.completed" &&
+                    root.TryGetProperty("response", out var completedResponse) &&
+                    completedResponse.TryGetProperty("usage", out var completedUsage))
+                {
+                    return new StreamChunk(null, null, ParseResponsesUsage(completedUsage));
+                }
+
                 var delta = ReadString(root, "delta");
                 if (string.IsNullOrEmpty(type) || string.IsNullOrEmpty(delta))
                 {
-                    return (null, null);
+                    return default;
                 }
 
                 if (type == "response.output_text.delta")
                 {
-                    return (delta, null);
+                    return new StreamChunk(delta, null, null);
                 }
 
                 // 推理分片的事件名在不同提供商之间不完全一致，
@@ -249,34 +332,66 @@ public sealed class AiService
                 if (type.Contains("reasoning", StringComparison.Ordinal) &&
                     type.EndsWith(".delta", StringComparison.Ordinal))
                 {
-                    return (null, delta);
+                    return new StreamChunk(null, delta, null);
                 }
 
-                return (null, null);
+                return default;
+            }
+
+            // Chat Completions：用量在最后一个分片的 usage 里（可能没有 choices）。
+            TokenUsage? streamUsage = null;
+            if (root.TryGetProperty("usage", out var chatUsage) &&
+                chatUsage.ValueKind == JsonValueKind.Object)
+            {
+                streamUsage = ParseChatUsage(chatUsage);
             }
 
             if (!root.TryGetProperty("choices", out var choices) ||
                 choices.ValueKind != JsonValueKind.Array ||
                 choices.GetArrayLength() == 0)
             {
-                return (null, null);
+                return new StreamChunk(null, null, streamUsage);
             }
 
             if (!choices[0].TryGetProperty("delta", out var chatDelta))
             {
-                return (null, null);
+                return new StreamChunk(null, null, streamUsage);
             }
 
             // reasoning_content 是 DeepSeek 的字段名，部分兼容实现用 reasoning。
-            return (
+            return new StreamChunk(
                 ReadString(chatDelta, "content"),
-                ReadString(chatDelta, "reasoning_content") ?? ReadString(chatDelta, "reasoning"));
+                ReadString(chatDelta, "reasoning_content") ?? ReadString(chatDelta, "reasoning"),
+                streamUsage);
         }
         catch (JsonException)
         {
             // 无法解析的分片直接忽略，不要因此中断整条流。
-            return (null, null);
+            return default;
         }
+    }
+
+    private static TokenUsage? ParseChatUsage(JsonElement usage)
+    {
+        var prompt = ReadInt(usage, "prompt_tokens");
+        var completion = ReadInt(usage, "completion_tokens");
+        return prompt == 0 && completion == 0 ? null : new TokenUsage(prompt, completion);
+    }
+
+    private static TokenUsage? ParseResponsesUsage(JsonElement usage)
+    {
+        var input = ReadInt(usage, "input_tokens");
+        var output = ReadInt(usage, "output_tokens");
+        return input == 0 && output == 0 ? null : new TokenUsage(input, output);
+    }
+
+    private static int ReadInt(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var value) &&
+               value.ValueKind == JsonValueKind.Number &&
+               value.TryGetInt32(out var number)
+            ? number
+            : 0;
     }
 
     private static string? ReadString(JsonElement element, string propertyName)
@@ -295,7 +410,8 @@ public sealed class AiService
         IReadOnlyList<ImageAttachment>? images,
         IReadOnlyList<ConversationTurn>? conversation,
         bool stream,
-        bool thinkingEnabled)
+        bool thinkingEnabled,
+        bool includeStreamUsage)
     {
         // 思考现在是独立开关。老配置里若还留着「深度思考」功能项，也按开启处理。
         var isThinking = thinkingEnabled || function.Mode == WorkflowMode.Think;
@@ -400,6 +516,15 @@ public sealed class AiService
         if (stream)
         {
             chatBody["stream"] = true;
+
+            // 精确 token 用量要靠这个开关；不认它的提供商会 400，上层会去掉重试。
+            if (includeStreamUsage)
+            {
+                chatBody["stream_options"] = new Dictionary<string, object?>
+                {
+                    ["include_usage"] = true
+                };
+            }
         }
 
         if (!isThinking)
@@ -492,7 +617,7 @@ public sealed class AiService
         return $"data:{image.MediaType};base64,{Convert.ToBase64String(image.Bytes)}";
     }
 
-    private static AiResult ParseChatCompletions(string payload)
+    private static AiResult ParseChatCompletions(string payload, TimeSpan elapsed)
     {
         var chatResponse = JsonSerializer.Deserialize<ChatResponse>(payload, JsonDefaults.Compact);
         var message = chatResponse?.Choices?.FirstOrDefault()?.Message;
@@ -500,15 +625,17 @@ public sealed class AiService
         var reasoning = message?.ReasoningContent?.Trim();
         return new AiResult(
             string.IsNullOrWhiteSpace(content) ? "模型没有返回文本内容。" : content,
-            string.IsNullOrWhiteSpace(reasoning) ? null : reasoning);
+            string.IsNullOrWhiteSpace(reasoning) ? null : reasoning,
+            chatResponse?.Usage?.ToTokenUsage(),
+            elapsed);
     }
 
-    private static AiResult ParseResponses(string payload)
+    private static AiResult ParseResponses(string payload, TimeSpan elapsed)
     {
         var response = JsonSerializer.Deserialize<ResponsesEnvelope>(payload, JsonDefaults.Compact);
         if (response?.Output is null || response.Output.Count == 0)
         {
-            return new AiResult("模型没有返回文本内容。");
+            return new AiResult("模型没有返回文本内容。", null, response?.Usage?.ToTokenUsage(), elapsed);
         }
 
         var answerParts = response.Output
@@ -536,7 +663,9 @@ public sealed class AiService
             answer,
             reasoningParts.Length == 0
                 ? null
-                : string.Join(Environment.NewLine + Environment.NewLine, reasoningParts));
+                : string.Join(Environment.NewLine + Environment.NewLine, reasoningParts),
+            response.Usage?.ToTokenUsage(),
+            elapsed);
     }
 
     private static string BuildEndpoint(string baseUri, ApiProtocol protocol)
@@ -593,11 +722,35 @@ public sealed class AiService
         string Content,
         [property: JsonPropertyName("reasoning_content")] string? ReasoningContent = null);
 
-    private sealed record ChatResponse(List<ChatChoice>? Choices);
+    private sealed record ChatResponse(List<ChatChoice>? Choices, ChatUsage? Usage);
+
+    private sealed record ChatUsage(
+        [property: JsonPropertyName("prompt_tokens")] int? PromptTokens,
+        [property: JsonPropertyName("completion_tokens")] int? CompletionTokens)
+    {
+        public TokenUsage? ToTokenUsage()
+        {
+            var prompt = PromptTokens ?? 0;
+            var completion = CompletionTokens ?? 0;
+            return prompt == 0 && completion == 0 ? null : new TokenUsage(prompt, completion);
+        }
+    }
 
     private sealed record ChatChoice(ChatMessage Message);
 
-    private sealed record ResponsesEnvelope(List<ResponseOutputItem>? Output);
+    private sealed record ResponsesEnvelope(List<ResponseOutputItem>? Output, ResponsesUsage? Usage);
+
+    private sealed record ResponsesUsage(
+        [property: JsonPropertyName("input_tokens")] int? InputTokens,
+        [property: JsonPropertyName("output_tokens")] int? OutputTokens)
+    {
+        public TokenUsage? ToTokenUsage()
+        {
+            var input = InputTokens ?? 0;
+            var output = OutputTokens ?? 0;
+            return input == 0 && output == 0 ? null : new TokenUsage(input, output);
+        }
+    }
 
     private sealed record ResponseOutputItem(
         string? Type,

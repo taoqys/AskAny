@@ -86,7 +86,24 @@ public sealed record ConversationTurn(
     string Content,
     IReadOnlyList<ImageAttachment>? Images = null);
 
-public sealed record AiResult(string Answer, string? Reasoning = null);
+// 提供商的用量回报。有的实现只给总数，有的给全，缺失的字段按 0 处理。
+public sealed record TokenUsage(int PromptTokens, int CompletionTokens)
+{
+    public int TotalTokens => PromptTokens + CompletionTokens;
+
+    public static readonly TokenUsage Empty = new(0, 0);
+
+    public bool HasAny => TotalTokens > 0;
+}
+
+// 一次模型调用的结果与指标。
+// TimeToFirstToken 是「从发出请求到收到第一个分片」的时间；非流式调用没有这个语义，
+// 此时等于整体耗时。
+public sealed record AiResult(
+    string Answer,
+    string? Reasoning = null,
+    TokenUsage? Usage = null,
+    TimeSpan? TimeToFirstToken = null);
 
 public sealed record ModelChoice(ProviderConfig Provider, string Model)
 {
@@ -257,6 +274,11 @@ public sealed class HistoryEntry
     // 空 TopicId 表示老记录（升级前写入的历史）。
     public string TopicId { get; set; } = string.Empty;
     public string TopicTitle { get; set; } = string.Empty;
+
+    // 用量与首字耗时。老记录没有这些字段，默认 0 表示「未知」。
+    public int PromptTokens { get; set; }
+    public int CompletionTokens { get; set; }
+    public int TimeToFirstTokenMs { get; set; }
 
     [JsonIgnore]
     public string DisplayMeta =>
