@@ -1890,8 +1890,7 @@ public partial class MainWindow : Window
     }
 
     // 悬停提示：提供商 / 模型 + 能力标签（图片、推理、是否始终思考、上下文长度）。
-    private static string BuildModelToolTip(ModelChoice choice)
-    {
+    private static string BuildModelToolTip(ModelChoice choice)    {
         var capability = ModelCapabilities.Infer(choice.Model);
         var parts = new List<string> { $"{choice.Provider.Name} / {choice.Model}" };
 
@@ -1907,10 +1906,18 @@ public partial class MainWindow : Window
 
         if (capability.ContextTokens is { } tokens and > 0)
         {
-            parts.Add($"上下文 {tokens / 1000}K");
+            parts.Add($"上下文 {FormatContextTokens(tokens)}");
         }
 
         return string.Join(" · ", parts);
+    }
+
+    // 上下文长度：100 万以上用 M，避免出现「1047K」这种读起来费劲的数字。
+    private static string FormatContextTokens(int tokens)
+    {
+        return tokens >= 1_000_000
+            ? $"{tokens / 1_000_000d:0.#}M"
+            : $"{Math.Round(tokens / 1000d):0}K";
     }
 
     // Tab 切左边（主）模型；` 切右边（对比）模型；按住 Shift 反向。
@@ -2147,7 +2154,7 @@ public partial class MainWindow : Window
     private void UpdateShortcutHint()
     {
         ShortcutHintText.Text = _compareMode
-            ? "ESC 关闭 · Tab/⇧Tab 切左 · ` /⇧` 切右"
+            ? "Tab/⇧Tab 左 · ` /⇧` 右"
             : "ESC 关闭 · Tab/⇧Tab 换模型";
     }
 

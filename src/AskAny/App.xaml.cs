@@ -377,7 +377,10 @@ public partial class App : Application
                 {
                     var plain = await service.ExecuteAsync(
                         function, "只回复“连接成功”四个字。", provider, key, null);
-                    report.AppendLine($"非流式：成功，回答 {plain.Answer.Length} 字");
+                    report.AppendLine(
+                        $"非流式：成功，回答 {plain.Answer.Length} 字，" +
+                        $"tok {plain.Usage?.PromptTokens ?? 0}→{plain.Usage?.CompletionTokens ?? 0}，" +
+                        $"首字 {plain.TimeToFirstToken?.TotalSeconds:F2}s");
                 }
                 catch (Exception exception)
                 {
@@ -396,7 +399,10 @@ public partial class App : Application
                         null,
                         null,
                         (_, _) => deltas++);
-                    report.AppendLine($"流式  ：成功，{deltas} 个分片，最终 {streamed.Answer.Length} 字");
+                    report.AppendLine(
+                        $"流式  ：成功，{deltas} 个分片，最终 {streamed.Answer.Length} 字，" +
+                        $"tok {streamed.Usage?.PromptTokens ?? 0}→{streamed.Usage?.CompletionTokens ?? 0}，" +
+                        $"首字 {streamed.TimeToFirstToken?.TotalSeconds:F2}s");
                 }
                 catch (Exception exception)
                 {
